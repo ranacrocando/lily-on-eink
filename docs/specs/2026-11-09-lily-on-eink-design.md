@@ -413,7 +413,7 @@ A published CLI (`packages/cli`, GPL) is **not part of the MVP**. The MVP is the
 ## 8. Test corpus (`corpus/`)
 
 Rules for the corpus:
-- Each file is stored **converted once** to the engine's LilyPond version, using native `convert-ly` of the same version as a developer tool.
+- Each file must compile on the engine's LilyPond version. Files that do not compile unchanged are **converted once** with native `convert-ly` of the same version, as a developer tool. `SOURCES.md` records which applies per file.
 - The original upstream version and the conversion are recorded in `corpus/SOURCES.md`.
 - Every file must be at most about 2 pages on the reference device.
 
@@ -561,7 +561,7 @@ A CI job plus a pre-push hook. It fails if any tracked file (including `package-
 - absolute local paths: `C:\Users\`, `/home/`, `/Users/`, and `file:` URLs with absolute paths;
 - an email address other than the `ranacrocando` noreply address.
   - **Allowlist:**
-    - `corpus/**` (upstream maintainer emails and copyright lines in third-party headers) and the license files;
+    - `corpus/**` (upstream maintainer emails and copyright lines in third-party headers), `docs/**` (examples of the rules themselves), `scripts/privacy-check.mjs` and the license files. These paths are still checked against the denylist;
     - for the committer field, `noreply@github.com` (GitHub squash merges) and `*[bot]@users.noreply.github.com`.
 
 Pull requests from forks cannot read secrets. After going public, the denylist step is skipped for fork PRs, while the path and email rules still run. The maintainer's local pre-push hook remains the primary guard.
