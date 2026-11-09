@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 const ABS_PATH = [
   /[A-Za-z]:[\\/]+Users[\\/]/i,
-  /(^|[\s"'(=:])\/(home|Users)\/[^\s/]+/,
+  /(^|[\s"'(=:`[])\/(home|Users)\/[^\s/]+/,
   /file:\/\/\/?([A-Za-z]:|home\/|Users\/)/i,
 ];
 const EMAIL = /[\w.+-]+@[\w-]+(\.[\w-]+)*\.[A-Za-z]{2,}\b/g;
@@ -52,7 +52,7 @@ function main() {
   const isFork = process.env.IS_FORK === 'true';
   let denylist = loadDenylist();
   if (isFork) {
-    console.log('notice: fork PR, denylist check skipped');
+    console.log('::notice::fork PR, denylist check skipped');
     denylist = [];
   } else if (process.env.CI === 'true' && denylist.length === 0) {
     console.error('PRIVACY_DENYLIST secret missing');

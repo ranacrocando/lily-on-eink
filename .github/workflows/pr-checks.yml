@@ -18,4 +18,4 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
-          printf '%s' "$BODY" | grep -Eq -- '- \[x\] Independent review done \(reviewer ≠ author\): .{10,}' && ! printf '%s' "$BODY" | grep -qF '<summary or link>' || { echo "Tick the review checkbox and replace the placeholder with the review summary/link"; exit 1; }
+          printf '%s' "$BODY" | grep -Eq -- '- \[[xX]\] Independent review done \(reviewer ≠ author\): .{10,}' && ! printf '%s' "$BODY" | grep -qF '<summary or link>' || { echo "Tick the review checkbox and replace the placeholder with the review summary/link"; exit 1; }
