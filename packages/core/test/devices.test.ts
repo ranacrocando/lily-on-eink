@@ -5,6 +5,7 @@ describe('devices', () => {
   it('computes the page size in mm', () => {
     expect(pageSizeMm(getDevice('kobo-sage'))).toEqual({ width: 121.92, height: 162.56 });
   });
+it('computes the reMarkable 2 page size', () => {    expect(pageSizeMm(getDevice('remarkable-2'))).toEqual({ width: 157.79, height: 210.39 });  });  it('has portrait orientation for every preset', () => {    for (const d of listDevices()) {      const { width, height } = pageSizeMm(d);      expect(width, d.id).toBeLessThan(height);    }  });
   it('lists the presets', () => {
     expect(listDevices().map((d) => d.id)).toEqual(['kobo-sage', 'kobo-clara-bw', 'remarkable-2']);
   });
