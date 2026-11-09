@@ -17,3 +17,6 @@ Probed on 2026-11-09 in Node 22, in an offline container (no network, 2 CPUs).
 | `system()` in Node | **Runs a real shell.** `(system "exit 7")` → 1792 (= 7 << 8) | Node use is for trusted files only. Not an issue in browsers |
 | Cancel | Aborting via `AbortSignal` rejects with `AbortError` after about 0.5 s. **The same reusable compiler keeps working afterwards** | No need to recreate the compiler ourselves |
 | Speed | Earlier spike: preload 2.2 s, first compile 6.1 s, later compiles 2.8 s (Reger, 2 pages) | |
+| Title markups: `line-width` | Probed 2026-11-09: in `bookTitleMarkup` and `oddFooterMarkup`, `(chain-assoc-get 'line-width props)` is set and equals `(ly:output-def-lookup layout 'line-width)`, e.g. 75.6 staff spaces for Kobo Sage with the organ profile | The overlay's title command reads the props and falls back to `layout` |
+| Title markups: stacking | `\column` places each item at the larger of `baseline-skip` (origin to origin) and touching extents (padding 0) | A wrapped field's origin is put on its last line, so the next field follows it at the normal `baseline-skip` |
+| Title markups: precedence | A `bookTitleMarkup` set in the wrapper's `\paper` block, which follows the user's `\include`, beats one from the user's top-level `\paper` (pinned by a corpus test) | Title and footer overrides live in that block, not in the overlay |
