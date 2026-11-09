@@ -1,0 +1,32 @@
+[
+  {
+    "id": "kobo-sage",
+    "name": "Kobo Sage (2021)",
+    "widthPx": 1440,
+    "heightPx": 1920,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://ereader.kobo.com/en-us/products/kobo-sage"
+  },
+  {
+    "id": "kobo-clara-bw",
+    "name": "Kobo Clara BW (2024)",
+    "widthPx": 1072,
+    "heightPx": 1448,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": -1,
+    "source": "https://ereader.kobo.com/en-us/products/kobo-clara-bw (resolution); https://goodereader.com/blog/electronic-readers/full-review-of-the-rakuten-kobo-bw-e-reader (300 ppi)"
+  },
+  {
+    "id": "remarkable-2",
+    "name": "reMarkable 2",
+    "widthPx": 1404,
+    "heightPx": 1872,
+    "ppi": 226,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://support.remarkable.com/articles/Knowledge/About-reMarkable-2"
+  }
+]
