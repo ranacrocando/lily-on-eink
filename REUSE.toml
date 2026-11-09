@@ -1,0 +1,14 @@
+# corpus/** is deliberately not covered by the default: licensing is per file (see corpus/SOURCES.md).
+version = 1
+
+[[annotations]]
+path = ["*", ".github/**", ".githooks/**", "docs/**", "packages/core/**", "scripts/**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "lily-on-eink contributors"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["packages/engine-wasm/**", "scripts/convert.ts"]
+precedence = "override"
+SPDX-FileCopyrightText = "lily-on-eink contributors"
+SPDX-License-Identifier = "GPL-3.0-or-later"

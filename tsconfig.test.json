@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "allowJs": true,
+    "checkJs": false,
+    "paths": {
+      "@lily-on-eink/core": ["./packages/core/src/index.ts"],
+      "@lily-on-eink/engine-wasm": ["./packages/engine-wasm/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/test/**/*.ts", "scripts/**/*.ts"]
+}
