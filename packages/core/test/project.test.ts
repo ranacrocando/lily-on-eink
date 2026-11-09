@@ -47,6 +47,17 @@ describe('analyzeProject', () => {
     expect(r.missingIncludes).toEqual([]);
     expect(r.mainFiles).toEqual(['a.ly', 'c.ly']);
   });
+  it('treats absolute and backslash targets as missing', () => {
+    const r = analyzeProject(
+      { 'a.ly': String.raw`\include "/abs.ily" \include "b\\c.ily"`, 'abs.ily': '', 'b/c.ily': '' },
+      [],
+    );
+    expect(r.missingIncludes.map((m) => m.target)).toEqual(['/abs.ily', 'b\\c.ily']);
+  });
+  it('allows a newline between include and the string', () => {
+    expect(findIncludes('\\include\n   "a.ily"')).toEqual(['a.ily']);
+    expect(findIncludes('\\include' + ' '.repeat(100) + '"a.ily"')).toEqual(['a.ily']);
+  });
   it('reports includes escaping the root as missing', () => {
     const r = analyzeProject({ 'a.ly': String.raw`\include "../x.ily"` }, []);
     expect(r.missingIncludes).toEqual([{ from: 'a.ly', target: '../x.ily' }]);

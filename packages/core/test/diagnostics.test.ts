@@ -35,6 +35,11 @@ describe('parseDiagnostics', () => {
       { file: 'a/x.ly', line: 2, column: 1, severity: 'warning', message: 'something odd' },
     ]);
   });
+  it('handles file names with spaces', () => {
+    expect(parseDiagnostics('/input/my song/a b.ly:4:2: error: boom')).toEqual([
+      { file: 'my song/a b.ly', line: 4, column: 2, severity: 'error', message: 'boom' },
+    ]);
+  });
   it('returns nothing for empty logs', () => {
     expect(parseDiagnostics('')).toEqual([]);
   });

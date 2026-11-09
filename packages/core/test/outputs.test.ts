@@ -55,4 +55,21 @@ describe('outputFileName', () => {
     expect(n.length).toBeLessThanOrEqual(150);
     expect(n.endsWith(' (2) – Kobo Sage.pdf')).toBe(true);
   });
+  it('truncates a very long device name and keeps the separator and extension', () => {
+    const n = outputFileName('Song', 'x.ly', 'D'.repeat(400), 1);
+    expect(n.length).toBeLessThanOrEqual(150);
+    expect(n.startsWith('Song (2) – D')).toBe(true);
+    expect(n.endsWith('.pdf')).toBe(true);
+  });
+  it('falls back to score for an empty base and never starts with a space', () => {
+    expect(outputFileName('...', 'x.ly', 'Dev', 0)).toBe('score – Dev.pdf');
+    expect(outputFileName('   ', '', 'Dev', 0)).toBe('score – Dev.pdf');
+  });
+  it('trims the title', () => {
+    expect(outputFileName('  Song  ', 'x.ly', 'Dev', 0)).toBe('Song – Dev.pdf');
+  });
+  it('orders pages numerically', () => {
+    const r = groupOutputs({ 'score-page10.png': b(10), 'score-page9.png': b(9), 'score-page2.png': b(2) });
+    expect(r.books[0]!.pngPages).toEqual([b(2), b(9), b(10)]);
+  });
 });

@@ -56,10 +56,14 @@ export function outputFileName(
   bookIndex: number,
 ): string {
   const fallback = (basename.split(/[\\/]/).pop() ?? basename).replace(/\.[^.]*$/, '');
-  const base = clean(title && title.trim() !== '' ? title : fallback);
+  const t = title?.trim();
+  const base = clean(t ? t : fallback.trim());
   const book = bookIndex > 0 ? ` (${bookIndex + 1})` : '';
-  const tail = `${book} – ${clean(deviceName)}.pdf`;
+  const fixed = `${book} – `;
+  const ext = '.pdf';
+  const device = clean(deviceName).slice(0, Math.max(0, MAX_NAME_LENGTH - fixed.length - ext.length - 5));
+  const tail = `${fixed}${device}${ext}`;
   const room = Math.max(0, MAX_NAME_LENGTH - tail.length);
-  const head = trimEnd(base.slice(0, room));
+  const head = trimEnd(base.slice(0, room).trimStart()) || 'score';
   return `${head}${tail}`;
 }

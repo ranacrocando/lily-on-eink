@@ -37,6 +37,8 @@ function readString(src: string, start: number): [string, number] {
   return [out, i + 1];
 }
 
+const DIRECTIVE = /\\(include|version)\s*"/y;
+
 function scan(src: string): { includes: string[]; version?: string } {
   const includes: string[] = [];
   let version: string | undefined;
@@ -54,7 +56,8 @@ function scan(src: string): { includes: string[]; version?: string } {
     } else if (c === '"') {
       i = readString(src, i)[1];
     } else if (c === '\\') {
-      const m = /^\\(include|version)\s*"/.exec(src.slice(i, i + 40));
+      DIRECTIVE.lastIndex = i;
+      const m = DIRECTIVE.exec(src);
       if (m) {
         const [value, next] = readString(src, i + m[0].length - 1);
         if (m[1] === 'include') includes.push(value);
@@ -77,6 +80,7 @@ export function findIncludes(source: string): string[] {
 
 /** Resolves `target` against `dir` (POSIX, `..` handled). Returns undefined if it escapes the root. */
 function resolvePath(dir: string, target: string): string | undefined {
+  if (target.startsWith('/') || target.includes('\\')) return undefined;
   const parts = dir === '' ? [] : dir.split('/');
   for (const seg of target.split('/')) {
     if (seg === '' || seg === '.') continue;
