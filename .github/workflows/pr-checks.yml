@@ -2,6 +2,10 @@ name: PR checks
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+concurrency:
+  # One run per PR/branch: a new push cancels the outdated PR run. Pushes to main are never cancelled.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   pull-requests: read
 jobs:
