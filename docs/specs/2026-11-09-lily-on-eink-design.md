@@ -48,7 +48,6 @@ A spike confirmed the approach before this spec was written:
 |---|---|---|
 | `lily-on-eink` → `packages/core` | LilyPond overlay (`.ily`), device presets, genre profiles, TypeScript core with an `Engine` *interface* only. **No engine code or engine assets** | MIT |
 | `lily-on-eink` → `packages/engine-wasm` | Thin adapter that implements `Engine` on top of `@sightread/lilypond-wasm` | GPL-3.0-or-later |
-| `lily-on-eink` → `packages/cli` | CLI; depends on `engine-wasm` | GPL-3.0-or-later |
 | `lily-on-eink` → `corpus/` | Test scores, each under its own license (PD, CC0, MIT) | per file |
 | `lily-on-eink-app` | Static web app; bundles core + `engine-wasm` + the engine | GPL-3.0-or-later |
 
@@ -84,7 +83,7 @@ lily-on-eink (monorepo, npm workspaces)               lily-on-eink-app (GPL)
 │   devices · profiles · wrapper · project  │        │  │    + engine-wasm        │
 │   diagnostics · convert() · Engine (type) │        │  └ GitHub Pages            │
 │ packages/engine-wasm (GPL) → lilypond-wasm│◄───────┤                            │
-│ packages/cli (GPL)                        │        └────────────────────────────┘
+│ scripts/convert (dev script, not shipped) │        └────────────────────────────┘
 │ corpus/ + tests                           │
 └───────────────────────────────────────────┘
 ```
@@ -135,16 +134,16 @@ npm cannot install a workspace sub-package straight from a git tag. Core is ther
 ### Engine and version policy
 
 - **One LilyPond version everywhere**, through `@sightread/lilypond-wasm` pinned to an exact version (currently 0.2.0, believed to bundle 2.26).
-  - The core reads the engine's real version (`lilypond --version` output or package metadata) and writes **that** into the wrapper's `\version`.
+  - The core reads the engine's real version (`(lilypond-version)` evaluated in the engine; recorded in `packages/engine-wasm/engine-version.json`) and writes **that** into the wrapper's `\version`.
   - It never hard-codes 2.26.
-- The **WASM engine is the only engine in v1.** It is used for the CLI, the tests, CI and the app, so layouts are identical everywhere. A spike showed that LilyPond 2.24 and 2.26 already differ in bars per line.
-- Every compile passes **`-dno-point-and-click`**. Otherwise PDFs contain `textedit://` links with absolute paths: a tap on a note on e-ink would try to follow them, and they leak local paths.
+- The **WASM engine is the only engine in v1.** It is used for the tests, CI, the dev convert script and the app, so layouts are identical everywhere. A spike showed that LilyPond 2.24 and 2.26 already differ in bars per line.
+- Every compile disables point-and-click (`#(ly:set-option 'point-and-click #f)` through the engine's `includeSettings` file, because the engine accepts no `-d` command-line options). Otherwise PDFs contain `textedit://` links with absolute paths: a tap on a note on e-ink would try to follow them, and they leak local paths.
 - The `Engine` interface allows other engines later, e.g. native LilyPond.
 
 ### Cancellation and timeouts
 
-- A WASM compile is a synchronous call and cannot be interrupted by an `AbortSignal` inside the module.
-- Cancel and timeout therefore **terminate the worker that runs the engine** and create a new one. In the browser that is a Web Worker; in Node it is `worker_threads`.
+- The engine runs compiles in its own worker (a Web Worker in the browser, `worker_threads` in Node). Cancel and timeout use its `AbortSignal` support. Verified: the compile rejects with `AbortError` after about 0.5 s, and **the reusable compiler stays usable** (`docs/engine-findings.md`).
+- `engine-wasm` only falls back to disposing and recreating the compiler if an abort ever leaves it unusable.
 - `engine-wasm` encapsulates this. Callers just pass an `AbortSignal` / `timeoutMs`.
 
 ## 4. The overlay (LilyPond layer)
@@ -328,7 +327,7 @@ interface Progress { mainFile: string; index: number; total: number;
 ```
 
 A main file with several `\book` blocks yields several outputs. They are not merged.
-- `bookIndex` follows the order in which the engine reports the output files. LilyPond numbers them `-1`, `-2`, … in order of appearance.
+- `bookIndex` follows the order in which the engine reports the output files. The first book's output is unsuffixed (`score.pdf`, bookIndex 0), and later books are `score-1.pdf`, `score-2.pdf`, … (bookIndex = N). PNG pages are named `score-page1.png`, `score-page2.png`, …
 - The overlay's book hook records each book's `\bookOutputName` / `\bookOutputSuffix`. The core uses this to map renamed outputs back to their index.
 - Final file names always come from `fileName`, never from the engine's names.
 
@@ -353,29 +352,29 @@ A failed main file produces diagnostics, and the others still convert.
 ### 5.4 Security
 
 - **Browser:** the user's own `.ly` files run Scheme inside their own tab. No extra risk.
-- **Node** (CLI and tests): the Emscripten glue implements `system()` with `child_process`, so a `.ly` file can run shell commands.
-  - `engine-wasm` stubs `system()` to fail in Node, if the glue allows it. Otherwise this is documented.
-  - The CLI docs state: **only convert files you trust.**
+- **Node** (tests, dev script, future CLI): the Emscripten glue implements `system()` with `child_process`. **Verified: a `.ly` file can run real shell commands in Node** (`(system "exit 7")` returned 1792, i.e. exit status 7 << 8). The engine package offers no hook to stub this.
+  - Node usage is therefore for **trusted files only**, and this is stated in the README.
+  - Before the CLI ships (post-MVP), mitigation is evaluated again, e.g. redefining `system`, `system*` and `open-pipe` in the settings file. That would be partial only.
 
 ### 5.5 Output metadata
 
 - The PDF Title comes from `\header { title }`. Verify that the engine sets it.
 - Filenames are sanitized for FAT32, because e-readers mount as FAT.
 
-## 6. CLI (`packages/cli`, GPL)
+## 6. CLI: post-MVP (phase 2)
 
-```
-lily-on-eink <files or folders...> --device kobo-sage [--profile organ]
-             [--staff-size 17] [--out dir] [--png] [--no-tagline]
-lily-on-eink devices            # list presets
-```
+A published CLI (`packages/cli`, GPL) is **not part of the MVP**. The MVP is the core plus the web app.
 
-- Given a folder, the CLI batch-converts every main file it finds, e.g. a checkout of a score repository.
-- Output layout: `<out>/<device-id>/<file>.pdf`.
+- Once the MVP shows what the CLI should look like (commands, batch behaviour, GitHub Action use), a GitHub issue describing it is opened. An independent agent reviews the issue before it is filed.
+- Until then, a **dev script** in the core repo covers batch conversion for the maintainer:
+  - `npm run convert -- <files or folders> --device kobo-sage [--profile organ] [--out dir]`
+  - It writes `<out>/<device-id>/<file>.pdf`.
+  - It is not published and has no stability promise.
+  - It imports the GPL `engine-wasm` package but is never distributed (no package, no release asset), so it has no license implication for the MIT core.
 
 ## 7. Web app (`lily-on-eink-app`, M2)
 
-**Stack:** Vite, TypeScript and plain DOM, no UI framework. Compiles run in a Web Worker; cancel and timeout terminate and recreate it (§3).
+**Stack:** Vite, TypeScript and plain DOM, no UI framework. Compiles run in a Web Worker; cancel and timeout abort the running compile (§3).
 
 ### Flow
 
@@ -391,7 +390,7 @@ lily-on-eink devices            # list presets
    - Note-size slider (relative to the profile default).
 4. **Preview.**
    - The first page is rendered as PNG at the device's ppi, mapped to 16 grey levels, and shown in a frame with the device's proportions.
-   - This relies on the engine's PNG output, which is verified in M1 (§11). If it fails, the fallback is rasterizing the PDF with pdf.js.
+   - This relies on the engine's PNG output, which the spike verified (`docs/engine-findings.md`). If it fails, the fallback is rasterizing the PDF with pdf.js.
 5. **Convert.**
    - Progress shows "2 of 5".
    - A cancel button and a 60 s timeout apply per main file.
@@ -465,7 +464,7 @@ Licensing rules:
    - generated wrapper text as snapshots.
 2. **Compile tests:** every corpus file × every M1 preset × its matching profile, using `engine-wasm` in Node. Each run must pass these checks:
    - no LilyPond errors (negative fixtures expect specific diagnostics);
-   - every PDF page size equals the device's full screen size within ±0.1 mm;
+   - every PDF page size equals the device's full screen size within ±0.5 mm, because LilyPond rounds the page to whole points;
    - page count and output count are within the expected range per fixture (default ≤ 2 pages on the reference device);
    - **nothing outside the margins:** in the PNG render, the band between the page edge and the effective margin (base margin + safe area − 0.5 mm) is pure white;
    - no `textedit://` links in the PDF.
@@ -478,12 +477,12 @@ Licensing rules:
 4. **Engine contract tests** (`packages/engine-wasm`, every CI run, a few seconds). We do not test LilyPond's engraving itself, only our assumptions about the engine:
    - the reported LilyPond version equals the expected version, which is recorded in `packages/engine-wasm/engine-version.json` and updated in the same PR as an engine bump;
    - PDF and PNG output are produced at a custom resolution;
-   - `-dno-point-and-click` works: no `textedit://` in the PDF;
+   - point-and-click is disabled through `includeSettings`: no `textedit://` in the PDF;
    - the PDF page size equals the requested paper size;
    - `\include` resolves through virtual files and include paths;
    - errors come back with file and line number;
-   - the `system()` stub blocks shell calls in Node;
-   - cancellation and timeout terminate and recreate the worker.
+   - **known risk, pinned by a test:** `system()` runs a real shell in Node (no stub exists). If an engine update changes this, the test fails and we re-evaluate (§5.4);
+   - an abort rejects with `AbortError`, and the same compiler works for the next compile.
 
    An engine version bump is its own PR. The contract tests show *which* assumption broke, and the visual snapshots show *what* changed in the layout.
 5. **No native LilyPond in tests or CI.** All LilyPond tests run through the same WASM engine the app ships, installed by `npm ci`. Native LilyPond is only a developer tool, used to `convert-ly` corpus files (§8).
@@ -584,11 +583,11 @@ Test logs and snapshots must contain only relative paths.
 ## 11. Milestones
 
 1. **M1, overlay and core.** Steps, in this order:
-   1. **Engine verification spike:** actual LilyPond version, PNG output at a custom resolution, `-dno-point-and-click`, worker termination in Node, a `system()` stub.
+   1. **Engine verification spike:** done; results in `docs/engine-findings.md`.
    2. Re-verify the §4 LilyPond internals against that version.
    3. The `.ily` overlay with the three-point strategy, custom title markup and indent measurement.
    4. Three verified presets and all profiles.
-   5. Core API, `engine-wasm`, CLI.
+   5. Core API, `engine-wasm`, the dev convert script.
    6. The full corpus with compile and visual tests, CI and the privacy check.
 
    Done when every corpus file passes on every M1 preset and looks right on a real Kobo Sage.
@@ -598,6 +597,8 @@ Test logs and snapshots must contain only relative paths.
    - switch the app's dependency to the core release tarballs (§3);
    - then decide on npm-registry publishing and the deferred features from §1.
 
+**After the MVP (outside the milestone list), Phase 2:** the CLI issue and its implementation (§6).
+
 ## 12. Risks and open questions
 
 | Risk | Mitigation |
@@ -605,7 +606,7 @@ Test logs and snapshots must contain only relative paths.
 | The hook strategy fails for exotic files (custom book handlers, heavy Scheme) | The corpus and edge fixtures catch regressions. Give a clear diagnostic and document the limits |
 | LilyPond internals differ in the engine's version | M1 step 2 re-verifies them before overlay work |
 | `lilypond-wasm` is maintained by a single person | Pinned version with integrity hash, `Engine` interface, mirrored sources |
-| The engine's PNG output doesn't work | M1 step 1. Fallback: pdf.js rasterization in the app, mupdf in tests |
+| The engine's PNG output stops working after an engine update | Contract test. Fallback: pdf.js rasterization in the app, mupdf in tests |
 | Safe-area values per device are unknown | Default 0; calibration PDF in M2; refined from user reports |
 | Performance on phones and old laptops | Progress UI, cancel, Worker; measure in M2 |
 | A user file needs `convert-ly` (2.18 or older) | Version warning with step-by-step guidance |
