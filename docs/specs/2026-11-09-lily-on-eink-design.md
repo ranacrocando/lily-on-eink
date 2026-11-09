@@ -556,7 +556,8 @@ A ruleset is committed as `.github/rulesets/main.json` and applied with `gh api`
 
 A CI job plus a pre-push hook. It fails if any tracked file (including `package-lock.json`), commit author or committer, or commit message contains:
 - an entry from the **private denylist** (the maintainer's private email addresses, employer name and domain, real name).
-  - The denylist is **plaintext but never committed**: it lives in the Actions secret `PRIVACY_DENYLIST` and in an untracked local file (`.privacy-denylist`, git-ignored) for the hook.
+  - The denylist is **plaintext but never committed**. It lives **only locally** in an untracked file (`.privacy-denylist`, git-ignored), used by the pre-push hook and by the review agents' checks. The maintainer decided not to store it as a GitHub secret.
+  - The optional secret `PRIVACY_DENYLIST` is still honoured if it is ever set. Without it, CI skips the denylist rule with a notice; the path and email rules always run in CI.
   - It is not hashed, because hashing such low-entropy values is easy to reverse with a dictionary.
 - absolute local paths: `C:\Users\`, `/home/`, `/Users/`, and `file:` URLs with absolute paths;
 - an email address other than the `ranacrocando` noreply address.

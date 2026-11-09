@@ -54,9 +54,11 @@ function main() {
   if (isFork) {
     console.log('::notice::fork PR, denylist check skipped');
     denylist = [];
-  } else if (process.env.CI === 'true' && denylist.length === 0) {
-    console.error('PRIVACY_DENYLIST secret missing');
-    process.exit(1);
+  } else if (denylist.length === 0) {
+    // The denylist is optional: the maintainer runs it locally (pre-push hook + reviews)
+    // via the untracked .privacy-denylist file. Path and email rules always run.
+    const msg = 'no denylist configured, denylist check skipped (path and email rules still run)';
+    console.log(process.env.CI === 'true' ? `::notice::${msg}` : msg);
   }
 
   const out = [];
