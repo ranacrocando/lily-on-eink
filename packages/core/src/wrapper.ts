@@ -8,6 +8,8 @@ export interface WrapperOptions {
   staffSize: number;
   keepTagline: boolean;
   lilypondVersion: string;
+  /** Test only: raw lines appended to the \paper block. Not exposed through convert(). */
+  extraPaper?: string;
 }
 
 export interface Wrapper {
@@ -46,6 +48,7 @@ export function buildWrapper(opts: WrapperOptions): Wrapper {
     String.raw`  right-margin = ${num(m.right)}\mm`,
     String.raw`  ragged-last-bottom = ##t`,
     String.raw`  print-page-number = ##f`,
+    ...(opts.extraPaper !== undefined ? [`  ${opts.extraPaper}`] : []),
     String.raw`}`,
     String.raw`#(set-global-staff-size ${num(opts.staffSize)})`,
   ];

@@ -95,6 +95,14 @@ function resolvePath(dir: string, target: string): string | undefined {
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
 
 /**
+ * Resolves an `\include` target of file `from` the way the engine does: relative to the
+ * including file's directory only. Returns undefined if the path escapes the project root.
+ */
+export function resolveInclude(from: string, target: string): string | undefined {
+  return resolvePath(dirOf(from), target);
+}
+
+/**
  * Analyzes project files (path to source). Includes resolve relative to the including
  * file's directory only, never the project root, as the engine does.
  */
@@ -111,7 +119,7 @@ export function analyzeProject(
     const { includes, version } = scan(files[path]!);
     if (version !== undefined) versions[path] = version;
     for (const target of includes) {
-      const resolved = resolvePath(dirOf(path), target);
+      const resolved = resolveInclude(path, target);
       if (resolved !== undefined && known.has(resolved)) included.add(resolved);
       else if (!builtinIncludes.includes(target)) missingIncludes.push({ from: path, target });
     }

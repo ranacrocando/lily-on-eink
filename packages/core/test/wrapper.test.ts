@@ -50,6 +50,13 @@ describe('buildWrapper', () => {
       String.raw`\include "a\"b\\c.ly"`,
     );
   });
+  it('appends extraPaper (test only) as the last line of the \\paper block', () => {
+    expect(buildWrapper({ ...base, extraPaper: 'indent = 0' }).source).toContain(
+      String.raw`  print-page-number = ##f
+  indent = 0
+}`,
+    );
+  });
 });
 
 describe('overlay', () => {
