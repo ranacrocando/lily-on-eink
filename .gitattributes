@@ -2,3 +2,9 @@
 *.png binary
 *.pdf binary
 *.wasm binary
+*.tgz binary
+*.zip binary
+*.otf binary
+*.ttf binary
+*.woff2 binary
+package-lock.json -diff
