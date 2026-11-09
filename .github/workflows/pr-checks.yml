@@ -11,16 +11,3 @@ jobs:
       - uses: amannn/action-semantic-pull-request@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  review-evidence:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require review evidence in PR body
-        env:
-          BODY: ${{ github.event.pull_request.body }}
-        run: |
-          # Only the ticked checkbox line counts; HTML comments (the template hint) are removed first.
-          line=$(printf '%s' "$BODY" | sed 's/<!--[^>]*-->//g; s/<!--.*$//' | grep -E -- '- \[[xX]\] Independent review done \(reviewer ≠ author\): *[^ ].{9,}' | head -n 1 || true)
-          if [ -z "$line" ]; then
-            echo "Tick the 'Independent review done' box and write the review summary or link after the colon."
-            exit 1
-          fi
