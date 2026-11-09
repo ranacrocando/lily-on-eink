@@ -172,6 +172,60 @@ describe('convert', () => {
     expect(progress.filter((p) => p.phase === 'compiling')).toHaveLength(4);
   });
 
+  it('stops with one error and no further engine calls once the signal is aborted', async () => {
+    const controller = new AbortController();
+    const { engine, requests } = fakeEngine(() => {
+      controller.abort();
+      return { ok: false, exitCode: -1, aborted: true, files: {}, log: '' };
+    });
+    const files = ['a.ly', 'b.ly', 'c.ly'].map((path) => ({ path, content: "{ c'1 }" }));
+    const result = await convert(files, { ...sage, signal: controller.signal }, engine);
+    expect(requests).toHaveLength(1);
+    const aborted = result.diagnostics.filter((d) => d.message === 'conversion aborted');
+    expect(aborted).toHaveLength(1);
+    expect(aborted[0]!.severity).toBe('error');
+
+    const pre = fakeEngine();
+    const r2 = await convert(files, { ...sage, signal: AbortSignal.abort() }, pre.engine);
+    expect(pre.requests).toHaveLength(0);
+    expect(r2.diagnostics.filter((d) => d.message === 'conversion aborted')).toHaveLength(1);
+  });
+
+  it('survives a throwing onProgress with a single warning', async () => {
+    const { engine } = fakeEngine();
+    const files = ['a.ly', 'b.ly'].map((path) => ({ path, content: "{ c'1 }" }));
+    const result = await convert(
+      files,
+      {
+        ...sage,
+        onProgress: () => {
+          throw new Error('ui gone');
+        },
+      },
+      engine,
+    );
+    expect(result.outputs).toHaveLength(2);
+    const warnings = result.diagnostics.filter((d) => d.severity === 'warning');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.message).toContain('ui gone');
+  });
+
+  it('warns when a project file is replaced by the overlay', async () => {
+    const { engine, requests } = fakeEngine();
+    const result = await convert(
+      [
+        { path: 'x/a.ly', content: "{ c'1 }" },
+        { path: 'x/lily-on-eink.ily', content: '% mine' },
+      ],
+      sage,
+      engine,
+    );
+    expect(requests[0]!.files['x/lily-on-eink.ily']).toBe(OVERLAY_ILY);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ file: 'x/lily-on-eink.ily', severity: 'warning', message: expect.stringContaining('replaced') }),
+    );
+  });
+
   it('passes the signal through', async () => {
     const { engine, requests } = fakeEngine();
     const controller = new AbortController();

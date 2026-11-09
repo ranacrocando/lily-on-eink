@@ -193,16 +193,39 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
     lilypondVersion: await engine.lilypondVersion(),
   };
 
+  let progressFailed = false;
   for (const [index, mainFile] of mainFiles.entries()) {
-    const progress = (phase: Progress['phase']) =>
-      options.onProgress?.({ mainFile, index, total: mainFiles.length, phase });
+    if (options.signal?.aborted) {
+      diagnostics.push(error(mainFile, 'conversion aborted'));
+      break;
+    }
+    const progress = (phase: Progress['phase']) => {
+      try {
+        options.onProgress?.({ mainFile, index, total: mainFiles.length, phase });
+      } catch (e) {
+        if (progressFailed) return;
+        progressFailed = true;
+        const message = `onProgress callback failed: ${e instanceof Error ? e.message : String(e)}`;
+        diagnostics.push({ file: mainFile, line: 0, column: 0, severity: 'warning', message });
+      }
+    };
     progress('compiling');
     const dir = dirOf(mainFile);
     const wrapper = buildWrapper({ ...wrapperOptions, mainBasename: baseOf(mainFile) });
+    const overlayPath = inDir(dir, wrapper.overlay.name);
+    if (overlayPath in engineFiles) {
+      diagnostics.push({
+        file: overlayPath,
+        line: 0,
+        column: 0,
+        severity: 'warning',
+        message: 'project file replaced by the lily-on-eink overlay of the same name',
+      });
+    }
     const req: EngineRequest = {
       source: wrapper.source,
       filename: inDir(dir, WRAPPER_NAME),
-      files: { ...engineFiles, [inDir(dir, wrapper.overlay.name)]: wrapper.overlay.content },
+      files: { ...engineFiles, [overlayPath]: wrapper.overlay.content },
       formats,
       resolution: device.ppi,
       timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,

@@ -70,31 +70,45 @@ function nonWhiteInBand(png: Uint8Array, band: number, leftRows?: [number, numbe
   return count;
 }
 
+const median = (xs: number[]): number => {
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+};
+
 /**
- * Row range [first, last] of the first system: rows that are dark over more than half the
- * width are staff lines; the first cluster of them (gaps under 100 px) is the first system.
+ * Row range [first, last] of the first staff on the page, where the first system's instrument
+ * name sits. Rows dark over more than half the width are staff lines; adjacent rows merge into
+ * one line. The staff space is the measured spacing of the first two lines, and the staff
+ * continues while the next gap stays under 1.5 staff spaces (the gap to the next staff, even a
+ * TabStaff, is several staff spaces).
  */
-function firstSystemRows(png: Uint8Array): [number, number] {
+function firstStaffRows(png: Uint8Array): [number, number] {
   const { width, height, data } = PNG.sync.read(Buffer.from(png));
-  const lines: number[] = [];
+  const lines: { from: number; to: number }[] = [];
   for (let y = 0; y < height; y++) {
     let dark = 0;
     for (let x = 0; x < width; x++) if (data[(y * width + x) * 4]! < 128) dark++;
-    if (dark > width / 2) lines.push(y);
+    if (dark <= width / 2) continue;
+    const prev = lines.at(-1);
+    if (prev && prev.to === y - 1) prev.to = y;
+    else lines.push({ from: y, to: y });
   }
-  if (!lines.length) throw new Error('no staff lines found');
-  let last = lines[0]!;
-  for (const y of lines) {
-    if (y - last >= 100) break;
-    last = y;
-  }
-  return [lines[0]!, last];
+  if (lines.length < 2) throw new Error('no staff found');
+  const centres = lines.map((l) => (l.from + l.to) / 2);
+  const threshold = 1.5 * (centres[1]! - centres[0]!);
+  let last = 0;
+  while (last + 1 < lines.length && centres[last + 1]! - centres[last]! < threshold) last++;
+  return [lines[0]!.from, lines[last]!.to];
 }
 
-/** Centres of the dark runs (any channel < 128) in the pixel column at 50% width, top down. */
-function darkRunCentres(png: Uint8Array): number[] {
+/**
+ * Centres of the dark runs (any channel < 128) in the pixel column at `fraction` of the
+ * width, top down. Runs longer than `maxRun` px (barlines, stems) are ignored.
+ */
+function darkRunCentres(png: Uint8Array, fraction: number, maxRun = 4): number[] {
   const { width, height, data } = PNG.sync.read(Buffer.from(png));
-  const x = Math.floor(width / 2);
+  const x = Math.floor(width * fraction);
   const centres: number[] = [];
   let start = -1;
   for (let y = 0; y <= height; y++) {
@@ -102,7 +116,7 @@ function darkRunCentres(png: Uint8Array): number[] {
     const dark = y < height && (data[i]! < 128 || data[i + 1]! < 128 || data[i + 2]! < 128);
     if (dark && start < 0) start = y;
     if (!dark && start >= 0) {
-      centres.push((start + y - 1) / 2);
+      if (y - start <= maxRun) centres.push((start + y - 1) / 2);
       start = -1;
     }
   }
@@ -187,11 +201,13 @@ describe('corpus on kobo-sage', () => {
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const page = result.outputs[0]?.pngPages?.[0];
     expect(page).toBeDefined();
-    const centres = darkRunCentres(page!).slice(0, 5);
-    expect(centres).toHaveLength(5);
-    const gaps = centres.slice(1).map((c, i) => c - centres[i]!);
-    const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
-    expect(Math.abs(mean - 17.7)).toBeLessThanOrEqual(1);
+    const gaps: number[] = [];
+    for (const fraction of [0.3, 0.4, 0.5, 0.6, 0.7]) {
+      const centres = darkRunCentres(page!, fraction).slice(0, 5);
+      expect(centres).toHaveLength(5);
+      gaps.push(...centres.slice(1).map((c, i) => c - centres[i]!));
+    }
+    expect(Math.abs(median(gaps) - 17.7)).toBeLessThanOrEqual(1);
   });
 
   it('negative control: indent = 0 pushes the instrument name into the margin band', async () => {
@@ -223,10 +239,10 @@ describe('corpus on kobo-sage', () => {
       .map(([, bytes]) => bytes);
     savePages('negative-control-indent-0', pages);
 
-    // Only the left band of the first system, where the "Bass" instrument name sits.
+    // Only the left band next to the first staff, where the "Bass" instrument name sits.
     const normal = (await convertOnSage(CASES[1])).outputs[0]!.pngPages![0]!;
-    expect(nonWhiteInBand(normal, BAND_PX, firstSystemRows(normal))).toBe(0);
-    expect(nonWhiteInBand(pages[0]!, BAND_PX, firstSystemRows(pages[0]!))).toBeGreaterThan(0);
+    expect(nonWhiteInBand(normal, BAND_PX, firstStaffRows(normal))).toBe(0);
+    expect(nonWhiteInBand(pages[0]!, BAND_PX, firstStaffRows(pages[0]!))).toBeGreaterThan(0);
   });
 });
 
