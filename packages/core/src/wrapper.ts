@@ -1,0 +1,57 @@
+import { OVERLAY_ILY } from './overlay-sources.js';
+import type { SafeAreaMm } from './devices.js';
+
+export interface WrapperOptions {
+  mainBasename: string;
+  pageMm: { width: number; height: number };
+  marginsMm: SafeAreaMm;
+  staffSize: number;
+  keepTagline: boolean;
+  lilypondVersion: string;
+}
+
+export interface Wrapper {
+  source: string;
+  overlay: { name: 'lily-on-eink.ily'; content: string };
+}
+
+// Known slice limits (to be fixed in the hardening plan):
+// - \book blocks with their own \paper are not overridden;
+// - a file-level line-width is not overridden;
+// - long titles are not handled.
+// Deliberately no set-paper-size (it would rescale margins and indent from A4)
+// and no indent override.
+
+/** Format with at most 2 decimals, locale independent. */
+function num(n: number): string {
+  return String(Math.round(n * 100) / 100);
+}
+
+function escapeLilyString(s: string): string {
+  return s.split('\\').join('\\\\').split('"').join('\\"');
+}
+
+export function buildWrapper(opts: WrapperOptions): Wrapper {
+  const m = opts.marginsMm;
+  const lines = [
+    String.raw`\version "${escapeLilyString(opts.lilypondVersion)}"`,
+    String.raw`\include "lily-on-eink.ily"`,
+    String.raw`\include "${escapeLilyString(opts.mainBasename)}"`,
+    String.raw`\paper {`,
+    String.raw`  paper-width = ${num(opts.pageMm.width)}\mm`,
+    String.raw`  paper-height = ${num(opts.pageMm.height)}\mm`,
+    String.raw`  top-margin = ${num(m.top)}\mm`,
+    String.raw`  bottom-margin = ${num(m.bottom)}\mm`,
+    String.raw`  left-margin = ${num(m.left)}\mm`,
+    String.raw`  right-margin = ${num(m.right)}\mm`,
+    String.raw`  ragged-last-bottom = ##t`,
+    String.raw`  print-page-number = ##f`,
+    String.raw`}`,
+    String.raw`#(set-global-staff-size ${num(opts.staffSize)})`,
+  ];
+  if (!opts.keepTagline) lines.push(String.raw`\header { tagline = ##f }`);
+  return {
+    source: lines.join('\n') + '\n',
+    overlay: { name: 'lily-on-eink.ily', content: OVERLAY_ILY },
+  };
+}
