@@ -1,0 +1,8 @@
+[
+  { "id": "generic", "name": "Generic", "staffSize": 17, "marginMm": 3 },
+  { "id": "organ", "name": "Organ", "staffSize": 17, "marginMm": 3 },
+  { "id": "piano", "name": "Piano", "staffSize": 17, "marginMm": 3 },
+  { "id": "leadsheet", "name": "Lead sheet", "staffSize": 18, "marginMm": 3 },
+  { "id": "tab", "name": "Tablature", "staffSize": 18, "marginMm": 3 },
+  { "id": "accordion", "name": "Accordion", "staffSize": 17, "marginMm": 3 }
+]
