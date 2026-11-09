@@ -20,7 +20,7 @@ const expected = String.raw`\version "2.26.0"
   paper-height = 162.56\mm
   top-margin = 3\mm
   bottom-margin = 3\mm
-  left-margin = 3\mm
+  left-margin = 6\mm
   right-margin = 3\mm
   ragged-last-bottom = ##t
   print-page-number = ##f
@@ -48,6 +48,13 @@ describe('buildWrapper', () => {
   it('escapes quotes and backslashes in the basename', () => {
     expect(buildWrapper({ ...base, mainBasename: String.raw`a"b\c.ly` }).source).toContain(
       String.raw`\include "a\"b\\c.ly"`,
+    );
+  });
+  it('appends extraPaper (test only) as the last line of the \\paper block', () => {
+    expect(buildWrapper({ ...base, extraPaper: 'indent = 0' }).source).toContain(
+      String.raw`  print-page-number = ##f
+  indent = 0
+}`,
     );
   });
 });
