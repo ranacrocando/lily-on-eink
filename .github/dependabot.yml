@@ -15,7 +15,8 @@ updates:
         exclude-patterns: ["@sightread/lilypond-wasm"]
         update-types: ["minor", "patch"]
     commit-message:
-      prefix: "deps"
+      prefix: "chore"
+      include: "scope"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -27,3 +28,4 @@ updates:
         update-types: ["minor", "patch"]
     commit-message:
       prefix: "ci"
+      include: "scope"
