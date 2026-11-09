@@ -42,8 +42,9 @@ allowPageTurn = #(define-music-function () () (lily-on-eink:neutral-page-marker)
                                   (* width (/ (+ dir 1) 2))
                                   X)))
 
-% Splits a string at spaces into lines that fit @var{width} (first fit, word by word), measured
-% with the current fonts. A single word wider than the line keeps a line of its own.
+% Splits a string into lines that fit @var{width} (first fit, word by word), measured with the
+% current fonts. It splits at ASCII spaces (U+0020) only: tabs, newlines and no-break spaces
+% stay inside a word. A single word wider than the line keeps a line of its own.
 #(define (lily-on-eink:wrap-string layout props str width)
    (let ((render (lambda (s) (interpret-markup layout props s))))
      (let loop ((words (filter (lambda (w) (not (string-null? w))) (string-split str #\space)))
@@ -98,6 +99,9 @@ width; a markup wider than the line is scaled down to fit and centred."
 #(define-markup-command (lily-on-eink-field-pair layout props left right) (symbol? symbol?)
    "Header fields @var{left} (flush left) and @var{right} (flush right) on one line when
 both fit side by side, else stacked, each wrapped or scaled like @code{lily-on-eink-field}."
+   (lily-on-eink:pair layout props left right))
+
+#(define (lily-on-eink:pair layout props left right)
    (let* ((width (lily-on-eink:available-width layout props))
           (gap (* 4 (chain-assoc-get 'word-space props 0.6)))
           (left-lines (lily-on-eink:value-lines layout props (chain-assoc-get left props #f) width))
@@ -111,17 +115,65 @@ both fit side by side, else stacked, each wrapped or scaled like @code{lily-on-e
          (lily-on-eink:stack props (list (ly:stencil-add (car flush-left) (car flush-right))) width)
          (lily-on-eink:stack props (append flush-left flush-right) width))))
 
-#(define (lily-on-eink:print-all-headers? layout props)
-   (eq? #t (ly:output-def-lookup layout 'print-all-headers)))
+% Places @var{lower} below @var{upper}, @var{gap} apart (ink extents, not baselines). Either
+% may be empty; the result keeps the full line as X extent.
+#(define (lily-on-eink:above upper lower gap width)
+   (cond
+    ((ly:stencil-empty? lower) upper)
+    ((ly:stencil-empty? upper) lower)
+    (else
+     (let ((both (ly:stencil-combine-at-edge upper Y DOWN lower gap)))
+       (ly:make-stencil (ly:stencil-expr both) (cons 0 width) (ly:stencil-extent both Y))))))
 
-#(define (lily-on-eink:first-page-of-part? layout props)
-   (eqv? (chain-assoc-get 'page:page-number props -1)
-         (ly:output-def-lookup layout 'first-page-number)))
+% Space between the stacked parts of the score title and of the footer, in staff spaces.
+#(define lily-on-eink:part-gap 1)
 
-#(define (lily-on-eink:last-page-of-book? layout props)
-   (and (chain-assoc-get 'page:is-bookpart-last-page props #f)
-        (chain-assoc-get 'page:is-last-bookpart props #f)
-        #t))
+#(define-markup-command (lily-on-eink-score-title layout props) ()
+   "Title of one score: the piece/opus pair. When the paper sets @code{print-all-headers}
+to true, each score repeats the full title block (the paper's @code{bookTitleMarkup},
+interpreted with this score's header) above that pair, @code{lily-on-eink:part-gap}
+staff spaces apart."
+   (let* ((width (lily-on-eink:available-width layout props))
+          (pair (lily-on-eink:pair layout props 'header:piece 'header:opus))
+          (full-title? (eq? #t (ly:output-def-lookup layout 'print-all-headers #f)))
+          (book-markup (and full-title? (ly:output-def-lookup layout 'bookTitleMarkup #f)))
+          (book (if (markup? book-markup)
+                    (lily-on-eink:shrink-to (interpret-markup layout props book-markup) width)
+                    empty-stencil)))
+     (lily-on-eink:above book pair lily-on-eink:part-gap width)))
+
+% Page facts for header and footer markups. The page properties are set by LilyPond's page
+% layout; first-page-number comes from the paper (it is the first page of the book part).
+#(define (lily-on-eink:part-first-page? layout props)
+   (let ((page (chain-assoc-get 'page:page-number props #f)))
+     (and (number? page)
+          (= page (ly:output-def-lookup layout 'first-page-number 1)))))
+
+#(define (lily-on-eink:book-last-page? layout props)
+   (and (eq? #t (chain-assoc-get 'page:is-bookpart-last-page props #f))
+        (eq? #t (chain-assoc-get 'page:is-last-bookpart props #f))))
+
+#(define-markup-command (lily-on-eink-footer layout props) ()
+   "Page footer: the copyright on the first page of each book part, the tagline (one size
+smaller) on the very last page of the book; both wrapped or scaled to the line width."
+   (let* ((width (lily-on-eink:available-width layout props))
+          (copyright
+           (if (lily-on-eink:part-first-page? layout props)
+               (interpret-markup layout props (make-lily-on-eink-field-markup 'header:copyright))
+               empty-stencil))
+          (tagline
+           (if (lily-on-eink:book-last-page? layout props)
+               (interpret-markup layout (cons '((font-size . -1)) props)
+                                 (make-lily-on-eink-field-markup 'header:tagline))
+               empty-stencil)))
+     (lily-on-eink:above copyright tagline lily-on-eink:part-gap width)))
+
+#(define-markup-command (lily-on-eink-page-header layout props) ()
+   "Page header: the instrument name, wrapped or scaled to the line width, on every page of a
+book part except its first (where the title block shows it). No page numbers."
+   (if (lily-on-eink:part-first-page? layout props)
+       empty-stencil
+       (interpret-markup layout props (make-lily-on-eink-field-markup 'header:instrument))))
 
 % The title is two font-size steps below LilyPond's A4 default (\huge instead of
 % \huge \larger \larger): on a page about 12 cm wide the A4 size wraps most titles and
@@ -139,17 +191,7 @@ lilyOnEinkBookTitleMarkup = \markup {
   }
 }
 
-lilyOnEinkScoreTitleMarkup = \markup {
-  \column {
-    \if #lily-on-eink:print-all-headers? { \lilyOnEinkBookTitleMarkup \hspace #1 }
-    \lily-on-eink-field-pair #'header:piece #'header:opus
-  }
-}
-
-lilyOnEinkFooterMarkup = \markup {
-  \column {
-    \if #lily-on-eink:first-page-of-part? \lily-on-eink-field #'header:copyright
-    \if #lily-on-eink:last-page-of-book? \small \lily-on-eink-field #'header:tagline
-  }
-}
+lilyOnEinkScoreTitleMarkup = \markup \lily-on-eink-score-title
+lilyOnEinkFooterMarkup = \markup \lily-on-eink-footer
+lilyOnEinkPageHeaderMarkup = \markup \lily-on-eink-page-header
 `;

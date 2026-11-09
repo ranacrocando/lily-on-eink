@@ -26,6 +26,8 @@ const expected = String.raw`\version "2.26.0"
   print-page-number = ##f
   bookTitleMarkup = \lilyOnEinkBookTitleMarkup
   scoreTitleMarkup = \lilyOnEinkScoreTitleMarkup
+  oddHeaderMarkup = \lilyOnEinkPageHeaderMarkup
+  evenHeaderMarkup = \lilyOnEinkPageHeaderMarkup
   oddFooterMarkup = \lilyOnEinkFooterMarkup
   evenFooterMarkup = \lilyOnEinkFooterMarkup
 }
