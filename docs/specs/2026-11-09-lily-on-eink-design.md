@@ -502,8 +502,9 @@ Runs on every pull request and on pushes to `main`. Jobs, all of which are requi
 2. unit tests;
 3. compile and visual tests (overlay repo);
 4. build plus Playwright smoke (app repo, using the pinned core checkout from §3);
-5. privacy check;
-6. PR title check (conventional commits, see below).
+5. PR title check (conventional commits, see below).
+
+CI deliberately stays lean: no privacy job and no PR-description checks (owner decision).
 
 Infrastructure:
 - The npm cache includes the engine package.
@@ -550,23 +551,18 @@ A ruleset is committed as `.github/rulesets/main.json` and applied with `gh api`
 ### Review policy
 
 - Every change (code, docs, spec, CI, tests) is reviewed by an agent or person **other than its author** before merge.
-- Evidence is required in the PR: a review summary comment, plus a PR-template checklist item ("independent review done: link/summary"). A CI check verifies the checklist item is ticked.
+- The review result is reported to the maintainer together with the merge request. It is not enforced by CI.
 
-### Privacy check
+### Privacy
 
-A CI job plus a pre-push hook. It fails if any tracked file (including `package-lock.json`), commit author or committer, or commit message contains:
-- an entry from the **private denylist** (the maintainer's private email addresses, employer name and domain, real name).
-  - The denylist is **plaintext but never committed**: it lives in the Actions secret `PRIVACY_DENYLIST` and in an untracked local file (`.privacy-denylist`, git-ignored) for the hook.
-  - It is not hashed, because hashing such low-entropy values is easy to reverse with a dictionary.
-- absolute local paths: `C:\Users\`, `/home/`, `/Users/`, and `file:` URLs with absolute paths;
-- an email address other than the `ranacrocando` noreply address.
-  - **Allowlist:**
-    - `corpus/**` (upstream maintainer emails and copyright lines in third-party headers) and the license files;
-    - for the committer field, `noreply@github.com` (GitHub squash merges) and `*[bot]@users.noreply.github.com`.
-
-Pull requests from forks cannot read secrets. After going public, the denylist step is skipped for fork PRs, while the path and email rules still run. The maintainer's local pre-push hook remains the primary guard.
-
-Test logs and snapshots must contain only relative paths.
+Owner decision: keep it simple, with no privacy machinery in CI.
+- Commits are only ever authored as `ranacrocando` with the GitHub noreply address. This is set via a per-folder git identity on the maintainer's machine.
+- A **local pre-push hook** (`scripts/privacy-check.mjs`) blocks a push if tracked files or commit metadata contain:
+  - absolute local paths;
+  - email addresses other than the noreply ones;
+  - entries of an untracked local denylist (`.privacy-denylist`, git-ignored) with the maintainer's private data.
+  - Allowlisted: `corpus/**` and `docs/**` (for paths and emails only), plus the license files.
+- Test logs and snapshots must contain only relative paths.
 
 ### Going public checklist
 
@@ -588,7 +584,7 @@ Test logs and snapshots must contain only relative paths.
    3. The `.ily` overlay with the three-point strategy, custom title markup and indent measurement.
    4. Three verified presets and all profiles.
    5. Core API, `engine-wasm`, the dev convert script.
-   6. The full corpus with compile and visual tests, CI and the privacy check.
+   6. The full corpus with compile and visual tests, and CI.
 
    Done when every corpus file passes on every M1 preset and looks right on a real Kobo Sage.
 2. **M2, web app:** the app per §7, the remaining presets, the calibration PDF, Playwright smoke, CI and the About/License page.
