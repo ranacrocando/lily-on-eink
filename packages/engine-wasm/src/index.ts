@@ -2,6 +2,7 @@ import { createReusableCompiler, LilyPondCompileError } from '@sightread/lilypon
 import type { CompileResult, ReusableCompiler } from '@sightread/lilypond-wasm';
 import type { Engine, EngineRequest, EngineResult } from '@lily-on-eink/core';
 
+// Reserved, namespaced name: it overrides a project file of the same name.
 const SETTINGS_FILE = 'lily-on-eink-settings.ly';
 const SETTINGS = String.raw`#(ly:set-option 'point-and-click #f)`;
 const VERSION_SOURCE = String.raw`#(ly:message (string-append "LYVERSION=" (lilypond-version)))`;

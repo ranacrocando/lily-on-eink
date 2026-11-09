@@ -35,6 +35,8 @@ function naturalSort(names: string[]): string[] {
 
 const smallPaper = String.raw`\paper { paper-width = 60\mm paper-height = 60\mm }`;
 const longMusic = String.raw`{ \repeat unfold 60 { c'8 d' e' f' g' a' b' c'' } }`;
+/** Still well over 300 ms of compile time, but much faster than veryLongMusic. */
+const mediumMusic = String.raw`{ \repeat unfold 300 { c'16 d' e' f' g' a' b' c'' } }`;
 /** Enough music that a compile takes well over a second. */
 const veryLongMusic = String.raw`{ \repeat unfold 1500 { c'16 d' e' f' g' a' b' c'' } }`;
 
@@ -166,11 +168,16 @@ describe('engine-wasm contract', () => {
     expect(next.files['score.pdf']).toBeDefined();
   });
 
+  it('returns aborted for an already-aborted signal', async () => {
+    const result = await engine.compile(req(String.raw`{ c'1 }`, { signal: AbortSignal.abort() }));
+    expect(result).toMatchObject({ ok: false, aborted: true, exitCode: -1 });
+  });
+
   it('aborts after timeoutMs and never times out without it', async () => {
     const timedOut = await engine.compile(req(veryLongMusic, { timeoutMs: 300 }));
     expect(timedOut).toMatchObject({ ok: false, exitCode: -1, aborted: true });
 
-    const unbounded = await engine.compile(req(veryLongMusic));
+    const unbounded = await engine.compile(req(mediumMusic));
     expect(unbounded.ok).toBe(true);
     expect(unbounded.aborted).toBeUndefined();
   });

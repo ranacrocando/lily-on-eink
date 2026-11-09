@@ -14,6 +14,7 @@ export interface EngineRequest {
   /** PNG dots per inch. */
   resolution?: number;
   signal?: AbortSignal;
+  /** Covers queue time and worker startup, not only engraving. */
   timeoutMs?: number;
 }
 
