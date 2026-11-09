@@ -61,7 +61,7 @@ describe('convert', () => {
     const { engine, requests } = fakeEngine();
     await convert([{ path: 'a.ly', content: "{ c'1 }" }], { ...sage, profile: 'leadsheet', keepTagline: false }, engine);
     expect(requests[0]!.source).toContain('(set-global-staff-size 18)');
-    expect(requests[0]!.source).toContain(String.raw`left-margin = 3\mm`);
+    expect(requests[0]!.source).toContain(String.raw`left-margin = 6\mm`);
     expect(requests[0]!.source).toContain(String.raw`\header { tagline = ##f }`);
     await convert([{ path: 'a.ly', content: "{ c'1 }" }], { ...sage, staffSize: 15 }, engine);
     expect(requests[1]!.source).toContain('(set-global-staff-size 15)');

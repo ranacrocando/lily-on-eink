@@ -24,6 +24,13 @@ export interface Wrapper {
 // Deliberately no set-paper-size (it would rescale margins and indent from A4)
 // and no indent override.
 
+/**
+ * Extra left margin (mm) on top of the profile margin. LilyPond draws system-start brackets,
+ * braces and bar numbers to the left of the staff start, i.e. inside `left-margin`. Measured
+ * on the corpus at 3 mm margin, they reached the page edge.
+ */
+export const SYSTEM_START_ALLOWANCE_MM = 3;
+
 /** Format with at most 2 decimals, locale independent. */
 function num(n: number): string {
   return String(Math.round(n * 100) / 100);
@@ -44,7 +51,7 @@ export function buildWrapper(opts: WrapperOptions): Wrapper {
     String.raw`  paper-height = ${num(opts.pageMm.height)}\mm`,
     String.raw`  top-margin = ${num(m.top)}\mm`,
     String.raw`  bottom-margin = ${num(m.bottom)}\mm`,
-    String.raw`  left-margin = ${num(m.left)}\mm`,
+    String.raw`  left-margin = ${num(m.left + SYSTEM_START_ALLOWANCE_MM)}\mm`,
     String.raw`  right-margin = ${num(m.right)}\mm`,
     String.raw`  ragged-last-bottom = ##t`,
     String.raw`  print-page-number = ##f`,

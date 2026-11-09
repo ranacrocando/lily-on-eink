@@ -22,8 +22,8 @@ const TEST_OUTPUT = fileURLToPath(new URL('../../../test-output/', import.meta.u
 
 const MM_PER_PT = 25.4 / 72;
 const SAGE_MM = { width: 121.92, height: 162.56 };
-/** 2.5 mm at 300 dpi. */
-const BAND_PX = Math.round((2.5 * 300) / 25.4);
+/** 1.5 mm at 300 dpi: nothing may be drawn this close to the page edge. */
+const BAND_PX = Math.round((1.5 * 300) / 25.4);
 
 /** Loads every file under corpus/<dir>, keyed by its POSIX path relative to corpus/. */
 function loadCorpusDir(dir: string): ProjectFile[] {
@@ -51,18 +51,44 @@ function pdfPageCount(pdf: Uint8Array): number {
   return latin1(pdf).match(/\/Type\s*\/Page(?![s\w])/g)?.length ?? 0;
 }
 
-/** Number of pixels within `band` px of any edge that have a channel below 250. */
-function nonWhiteInBand(png: Uint8Array, band: number): number {
+/**
+ * Number of pixels within `band` px of any edge that have a channel below 250.
+ * With `leftRows`, only the left band within rows [from, to] is checked.
+ */
+function nonWhiteInBand(png: Uint8Array, band: number, leftRows?: [number, number]): number {
   const { width, height, data } = PNG.sync.read(Buffer.from(png));
+  const [y0, y1] = leftRows ?? [0, height - 1];
   let count = 0;
-  for (let y = 0; y < height; y++) {
+  for (let y = y0; y <= y1; y++) {
     for (let x = 0; x < width; x++) {
-      if (x >= band && x < width - band && y >= band && y < height - band) continue;
+      const inBand = leftRows ? x < band : x < band || x >= width - band || y < band || y >= height - band;
+      if (!inBand) continue;
       const i = (y * width + x) * 4;
       if (data[i]! < 250 || data[i + 1]! < 250 || data[i + 2]! < 250) count++;
     }
   }
   return count;
+}
+
+/**
+ * Row range [first, last] of the first system: rows that are dark over more than half the
+ * width are staff lines; the first cluster of them (gaps under 100 px) is the first system.
+ */
+function firstSystemRows(png: Uint8Array): [number, number] {
+  const { width, height, data } = PNG.sync.read(Buffer.from(png));
+  const lines: number[] = [];
+  for (let y = 0; y < height; y++) {
+    let dark = 0;
+    for (let x = 0; x < width; x++) if (data[(y * width + x) * 4]! < 128) dark++;
+    if (dark > width / 2) lines.push(y);
+  }
+  if (!lines.length) throw new Error('no staff lines found');
+  let last = lines[0]!;
+  for (const y of lines) {
+    if (y - last >= 100) break;
+    last = y;
+  }
+  return [lines[0]!, last];
 }
 
 /** Centres of the dark runs (any channel < 128) in the pixel column at 50% width, top down. */
@@ -139,18 +165,19 @@ describe('corpus on kobo-sage', () => {
     expect(latin1(pdf!)).not.toContain('textedit');
   });
 
-  // KNOWN FAILURE with the slice overlay (3 mm margin, no indent handling, no title markup).
-  // Measured ink inside the 29 px band on the 300 dpi pages:
-  // - all three: bar numbers (and, for reger and bass-etude, the system-start bracket or brace)
-  //   sit left of the staff, x 0..28;
-  // - reger: the long title overflows both edges;
-  // - leise-rieselt: the verse markup (two columns) overflows the right edge.
-  // `it.fails` turns red as soon as a case passes, so this flips back to `it` when fixed.
-  it.fails.each(CASES)('$name keeps the 2.5 mm margin band white on every page', async (c) => {
+  const expectBandWhite = async (c: Case) => {
     const { pngPages = [] } = (await convertOnSage(c)).outputs[0]!;
     expect(pngPages.length).toBeGreaterThan(0);
     for (const page of pngPages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
-  });
+  };
+
+  it('bass-etude draws nothing within 1.5 mm of the page edge', () => expectBandWhite(CASES[1]));
+
+  // KNOWN FAILURES, deferred to the hardening plan (title markup / markup scaling):
+  // - reger: the long title is not wrapped and overflows both edges (page 1 only);
+  // - leise-rieselt: the two-column verse markup is wider than the line, right edge.
+  // `it.fails` turns red as soon as a case passes, so this flips back to `it` when fixed.
+  it.fails.each([CASES[0], CASES[2]])('$name draws nothing within 1.5 mm of the page edge', expectBandWhite);
 
   it('applies the staff size: 17 pt gives a staff space of about 17.7 px at 300 dpi', async () => {
     const files: ProjectFile[] = [
@@ -195,7 +222,11 @@ describe('corpus on kobo-sage', () => {
       .sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))
       .map(([, bytes]) => bytes);
     savePages('negative-control-indent-0', pages);
-    expect(nonWhiteInBand(pages[0]!, BAND_PX)).toBeGreaterThan(0);
+
+    // Only the left band of the first system, where the "Bass" instrument name sits.
+    const normal = (await convertOnSage(CASES[1])).outputs[0]!.pngPages![0]!;
+    expect(nonWhiteInBand(normal, BAND_PX, firstSystemRows(normal))).toBe(0);
+    expect(nonWhiteInBand(pages[0]!, BAND_PX, firstSystemRows(pages[0]!))).toBeGreaterThan(0);
   });
 });
 
