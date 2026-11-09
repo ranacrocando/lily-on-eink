@@ -1,0 +1,13 @@
+{
+  "name": "@lily-on-eink/engine-wasm",
+  "version": "0.0.0",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -b" },
+  "dependencies": {
+    "@sightread/lilypond-wasm": "0.2.0",
+    "@lily-on-eink/core": "0.0.0"
+  }
+}
