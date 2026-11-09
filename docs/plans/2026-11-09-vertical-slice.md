@@ -432,8 +432,7 @@ corpus/
     3. page count between 1 and 2;
     4. no `textedit` in the PDF;
     5. **margin band is white:** decode each PNG page with `pngjs`. Every pixel within `2.5 mm × 300/25.4 ≈ 29 px` of all 4 edges has every channel ≥ 250;
-    6. **staff size took effect:** a separate test on a synthetic project file `staff.ly` containing `\header { tagline = ##f } 
-ew Staff { s1*8 }`. Compile it with `convert` (device `kobo-sage`, `staffSize: 17`, PNG at 300 dpi). In the first page, scan the pixel column at 50% of the width from the top and take the first five dark runs (channel < 128). The mean distance between their centres must be 17.7 ± 1 px (17 pt staff ⇒ 4.25 pt staff space ⇒ 17.7 px).
+    6. **staff size took effect:** a separate test on a synthetic project file `staff.ly` containing `\header { tagline = ##f } \new Staff { s1*8 }`. Compile it with `convert` (device `kobo-sage`, `staffSize: 17`, PNG at 300 dpi). In the first page, scan the pixel column at 50% of the width from the top and take the first five dark runs (channel < 128). The mean distance between their centres must be 17.7 ± 1 px (17 pt staff ⇒ 4.25 pt staff space ⇒ 17.7 px).
   - **Negative control:** compile the bass etude with a wrapper variant that adds `indent = 0` to `\paper`. Use a test-only option `extraPaper: 'indent = 0'` on `buildWrapper`, not exposed in `convert`. The white-band check **must fail**. This proves the check detects clipped instrument names.
   - **Other devices:** Reger × `kobo-clara-bw` and Reger × `remarkable-2`: no errors, page size matches.
 - [ ] **Step 3: Implement `convert(files, options, engine)`** per spec §5.1, slice subset:
