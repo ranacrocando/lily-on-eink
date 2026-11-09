@@ -413,7 +413,7 @@ A published CLI (`packages/cli`, GPL) is **not part of the MVP**. The MVP is the
 ## 8. Test corpus (`corpus/`)
 
 Rules for the corpus:
-- Each file is stored **converted once** to the engine's LilyPond version, using native `convert-ly` of the same version as a developer tool.
+- Each file must compile on the engine's LilyPond version. Files that do not compile unchanged are **converted once** with native `convert-ly` of the same version, as a developer tool. `SOURCES.md` records which applies per file.
 - The original upstream version and the conversion are recorded in `corpus/SOURCES.md`.
 - Every file must be at most about 2 pages on the reference device.
 
