@@ -1,0 +1,21 @@
+name: PR checks
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+permissions:
+  pull-requests: read
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  review-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require review evidence in PR body
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$BODY" | grep -Eq -- '- \[x\] Independent review done \(reviewer ≠ author\): .{10,}' && ! printf '%s' "$BODY" | grep -qF '<summary or link>' || { echo "Tick the review checkbox and replace the placeholder with the review summary/link"; exit 1; }
