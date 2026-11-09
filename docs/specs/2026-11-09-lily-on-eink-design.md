@@ -97,7 +97,40 @@ lily-on-eink (monorepo, npm workspaces)               lily-on-eink-app (GPL)
   - It uses a fine-grained, read-only token (`contents:read` on `lily-on-eink` only) stored as the secret `CORE_REPO_TOKEN`.
   - It builds core, then the app.
   - Once the repos are public the token is no longer needed.
-  - npm publishing stays a later decision.
+
+### Distribution of core (no npm registry in v1)
+
+npm cannot install a workspace sub-package straight from a git tag. Core is therefore distributed as **tarballs attached to GitHub Releases**:
+- A release workflow in `lily-on-eink` runs **only when a GitHub Release is published** (`on: release: types: [published]`). Pushing a tag alone builds nothing.
+- The maintainer creates the release in the GitHub UI, with a new tag `vX.Y.Z` on `main`. The workflow then:
+  1. asserts that the release tag equals every package's `package.json` version, and fails the run otherwise. To fix a failed release, delete the release and its tag, fix the version on `main` via a PR, and create the release again. The workflow also offers `workflow_dispatch` with a tag input, to re-run the upload for an existing release;
+  2. builds the packages;
+  3. runs `npm pack` for `core` and `engine-wasm`;
+  4. **installs both tarballs into a clean temporary project as a smoke check**, using the same `overrides` entry as the app (see below);
+  5. uploads the `.tgz` files to that same release with `gh release upload --clobber`. The workflow sets `permissions: contents: write` and `GH_TOKEN: ${{ github.token }}`.
+- The workflow also runs for prereleases and for drafts once they are published. Releases must be created by a person, because releases created with `GITHUB_TOKEN` do not trigger workflows.
+- Once the repo is public, the app depends on **both** release tarball URLs. `engine-wasm` declares `@lily-on-eink/core` as a normal semver dependency, so the app also adds an `overrides` entry that maps `@lily-on-eink/core` to the core tarball URL. Otherwise npm would look for core on the registry. The lockfile pins the URLs and integrity hashes.
+
+  ```json
+  "dependencies": {
+    "@lily-on-eink/core": "https://github.com/ranacrocando/lily-on-eink/releases/download/v0.1.0/lily-on-eink-core-0.1.0.tgz",
+    "@lily-on-eink/engine-wasm": "https://github.com/ranacrocando/lily-on-eink/releases/download/v0.1.0/lily-on-eink-engine-wasm-0.1.0.tgz"
+  },
+  "overrides": {
+    "@lily-on-eink/core": "$@lily-on-eink/core"
+  }
+  ```
+- **App CI after the switch:**
+  - It installs the tarballs.
+  - For the parity test (§9) it additionally checks out `lily-on-eink` at **the same tag**, without a token once public, to get the corpus and reference snapshots.
+  - `core-ref.txt` is then replaced by the version in the tarball URLs, and `CORE_REPO_TOKEN` is removed.
+- **Until then** (private repos) the app uses the pinned checkout described above.
+- **Bumping core in the app is manual:** update the tarball URLs (or `core-ref.txt`) in a PR. Dependabot does not update URL or `file:` dependencies.
+- Publishing to the public npm registry stays optional. It is decided in M3, only if third parties want to use the library.
+
+**Engine version consistency.**
+- The app **never depends on `@sightread/lilypond-wasm` directly**. It gets the engine only transitively through `@lily-on-eink/engine-wasm`, so exactly one engine version exists in both repos.
+- The app's Dependabot config ignores that package.
 
 ### Engine and version policy
 
@@ -442,8 +475,24 @@ Licensing rules:
    - Comparison uses a near-zero per-pixel threshold plus a **cap on the number of differing pixels** (e.g. 0.01%), so a thinner staff line cannot pass unnoticed.
    - Runs on the reference device plus the ≤227 ppi device.
    - `npm run test:update` regenerates the references. Diff images are uploaded as a CI artifact when a run fails.
-4. **Review page:** `npm run review` writes a static HTML contact sheet of all fixtures × devices, in e-ink greys, for human review of layout changes.
-5. **App tests (M2):** unit tests for UI logic, a Playwright smoke test (load the app, drop a fixture, convert, check the download), and a build check.
+4. **Engine contract tests** (`packages/engine-wasm`, every CI run, a few seconds). We do not test LilyPond's engraving itself, only our assumptions about the engine:
+   - the reported LilyPond version equals the expected version, which is recorded in `packages/engine-wasm/engine-version.json` and updated in the same PR as an engine bump;
+   - PDF and PNG output are produced at a custom resolution;
+   - `-dno-point-and-click` works: no `textedit://` in the PDF;
+   - the PDF page size equals the requested paper size;
+   - `\include` resolves through virtual files and include paths;
+   - errors come back with file and line number;
+   - the `system()` stub blocks shell calls in Node;
+   - cancellation and timeout terminate and recreate the worker.
+
+   An engine version bump is its own PR. The contract tests show *which* assumption broke, and the visual snapshots show *what* changed in the layout.
+5. **No native LilyPond in tests or CI.** All LilyPond tests run through the same WASM engine the app ships, installed by `npm ci`. Native LilyPond is only a developer tool, used to `convert-ly` corpus files (§8).
+6. **Review page:** `npm run review` writes a static HTML contact sheet of all fixtures × devices, in e-ink greys, for human review of layout changes.
+7. **App tests (M2):**
+   - unit tests for UI logic;
+   - a build check;
+   - a Playwright smoke test: load the app, drop a fixture, convert, check the download;
+   - a **browser/Node parity test**: in a real browser (Chromium), convert one corpus fixture to PNG and compare it with core's Node snapshot of the same fixture and device. A match confirms that the WASM engine behaves the same in the browser as in the Node tests, so the core test suite also holds for the app.
 
 ## 10. CI, governance, privacy, publishing
 
@@ -454,11 +503,33 @@ Runs on every pull request and on pushes to `main`. Jobs, all of which are requi
 2. unit tests;
 3. compile and visual tests (overlay repo);
 4. build plus Playwright smoke (app repo, using the pinned core checkout from §3);
-5. privacy check.
+5. privacy check;
+6. PR title check (conventional commits, see below).
 
 Infrastructure:
 - The npm cache includes the engine package.
 - The Node version is pinned.
+- Visual snapshot jobs run in a Node container image pinned by digest, so the environment is identical on every run.
+
+### Dependency updates (Dependabot, both repos)
+
+`.github/dependabot.yml` covers two ecosystems:
+- `npm` at the repo root (workspaces included),
+- `github-actions`.
+
+Settings:
+- Schedule: **monthly**.
+- Minor and patch updates are grouped into one PR per ecosystem.
+- Major updates get separate PRs.
+- `@sightread/lilypond-wasm` (core repo only) is in its own group and never grouped with other updates. An engine bump changes layouts and needs a deliberate snapshot review (§9). That PR also updates `engine-version.json`; the contract test fails until it does, by design.
+- The app repo ignores `@sightread/lilypond-wasm` (see "Engine version consistency" in §3).
+
+Known gaps, handled manually:
+- In the app repo, Dependabot cannot resolve `file:../lily-on-eink/...` dependencies while repos are private. Its npm job may report errors until the switch to tarballs.
+- Dependabot never bumps core in the app (§3).
+- Dependabot does not update `.nvmrc` or `container:` image digests in workflows. These are bumped manually, at least when Dependabot's Node or Actions updates land.
+
+Dependabot PRs go through the same CI and review rules as any other PR.
 
 ### Branch protection
 
@@ -469,6 +540,13 @@ A ruleset is committed as `.github/rulesets/main.json` and applied with `gh api`
 - linear history (squash merges).
 
 **Approvals are not required**, because a single maintainer account cannot approve its own PRs. Until then the same discipline is followed by convention.
+
+### Conventional commits
+
+- All commits and **all PR titles** follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `ci:`, `build:`, `chore:`, `refactor:`, `perf:`, with an optional scope, and `!` for breaking changes.
+- PRs are squash-merged, so the PR title becomes the commit on `main`.
+- A required CI check validates the PR title (e.g. `amannn/action-semantic-pull-request`).
+- Dependabot PRs use `chore(deps): …` (or `chore(deps-dev): …` for dev dependencies) for npm, and `ci(deps): …` for GitHub Actions. The title check allows any scope.
 
 ### Review policy
 
@@ -515,7 +593,10 @@ Test logs and snapshots must contain only relative paths.
 
    Done when every corpus file passes on every M1 preset and looks right on a real Kobo Sage.
 2. **M2, web app:** the app per §7, the remaining presets, the calibration PDF, Playwright smoke, CI and the About/License page.
-3. **M3, publish:** run the going-public checklist, then decide on npm publishing and the deferred features from §1.
+3. **M3, publish:**
+   - run the going-public checklist;
+   - switch the app's dependency to the core release tarballs (§3);
+   - then decide on npm-registry publishing and the deferred features from §1.
 
 ## 12. Risks and open questions
 
