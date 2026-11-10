@@ -16,10 +16,21 @@ describe('devices', () => {
   });
   it('lists the presets', () => {
     expect(listDevices().map((d) => d.id)).toEqual([
-      'kobo-sage', 'kobo-clara-bw', 'remarkable-2',
-      'kobo-libra-2', 'kobo-libra-colour', 'kobo-clara-2e', 'kobo-elipsa-2e',
-      'kindle-paperwhite-2021', 'kindle-paperwhite-2024', 'kindle-scribe', 'kindle-oasis-2019',
-      'pocketbook-inkpad-4', 'pocketbook-era', 'boox-note-air3', 'remarkable-paper-pro',
+      'kobo-sage',
+      'kobo-clara-bw',
+      'remarkable-2',
+      'kobo-libra-2',
+      'kobo-libra-colour',
+      'kobo-clara-2e',
+      'kobo-elipsa-2e',
+      'kindle-paperwhite-2021',
+      'kindle-paperwhite-2024',
+      'kindle-scribe',
+      'kindle-oasis-2019',
+      'pocketbook-inkpad-4',
+      'pocketbook-era',
+      'boox-note-air3',
+      'remarkable-paper-pro',
     ]);
   });
   it('has sane, sourced values for every preset', () => {
