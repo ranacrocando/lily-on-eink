@@ -344,6 +344,7 @@ A failed main file produces diagnostics, and the others still convert.
 
 - **Include graph:** parse `\include "…"` statements, ignoring comments and strings. Resolve paths relative to the including file, then the include paths.
 - **Main files:** `.ly` files that no other uploaded file includes. `.ily` files are never main files. `mainFiles` overrides the detection.
+- **Flat uploads:** the web file picker yields bare names. Before analysis, an unresolved include is satisfied by moving the one uploaded file with that basename to the expected path (never overwriting, never taking a file another include already finds; repeated until stable). Several candidates: warning, no move. Paths in the result are the placed paths.
 - **Missing includes** are reported before compiling.
   - Exception: names that exist in the engine's own `ly/` directory (e.g. `english.ly`, `predefined-ukulele-fretboards.ly`) are not missing. The engine provides that list.
 - **Version check** reads `\version`:
@@ -352,6 +353,7 @@ A failed main file produces diagnostics, and the others still convert.
 
 ### 5.3 Diagnostics
 
+- Severity is `error`, `warning` or `info`. `info` comes from the core, not the log (a flat-uploaded include file was placed in the folder its includer expects). Several same-named candidates give a `warning`.
 - LilyPond errors and warnings are parsed from the log into `{ file, line, column, severity, message }`.
 - Absolute and virtual-FS paths are normalized to project-relative paths, for privacy and for stable snapshots.
 - Messages are written for non-technical users, with the raw log available as details.

@@ -287,4 +287,40 @@ describe('convert version warnings', () => {
     expect(warned(r)).toEqual([]);
     expect(r.diagnostics.some((d) => d.severity === 'error')).toBe(true);
   });
+
+  it('places flat-uploaded include files, reports info and uses the moved path', async () => {
+    const { engine, requests } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'main.ly', content: String.raw`\include "parts/voice.ly" { c'1 }` },
+      { path: 'voice.ly', content: 'x = 1' },
+    ];
+    const result = await convert(files, sage, engine);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.files['parts/voice.ly']).toBe('x = 1');
+    expect(requests[0]!.files).not.toHaveProperty('voice.ly');
+    expect(result.outputs.map((o) => o.mainFile)).toEqual(['main.ly']);
+    expect(result.diagnostics).toEqual([
+      {
+        file: 'main.ly',
+        line: 0,
+        column: 0,
+        severity: 'info',
+        message: 'voice.ly was placed in parts/ because main.ly includes it from there.',
+      },
+    ]);
+  });
+
+  it('warns about ambiguous flat uploads', async () => {
+    const { engine } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'main.ly', content: String.raw`\include "parts/voice.ily"` },
+      { path: 'voice.ily', content: '' },
+      { path: 'old/voice.ily', content: '' },
+    ];
+    const result = await convert(files, sage, engine);
+    const warning = result.diagnostics.find((d) => d.severity === 'warning');
+    expect(warning?.message).toBe(
+      'Several uploaded files are called voice.ily; main.ly includes parts/voice.ily. Upload the whole folder instead (Choose a folder) so the right one is used.',
+    );
+  });
 });

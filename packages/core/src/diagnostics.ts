@@ -2,7 +2,8 @@ export interface Diagnostic {
   file: string;
   line: number;
   column: number;
-  severity: 'error' | 'warning';
+  /** `info` is produced by the core itself (e.g. files placed), never parsed from the log. */
+  severity: 'error' | 'warning' | 'info';
   message: string;
 }
 

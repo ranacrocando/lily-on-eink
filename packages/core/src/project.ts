@@ -132,6 +132,120 @@ export function analyzeProject(
   return { mainFiles, missingIncludes, versions };
 }
 
+export interface IncludeMove {
+  /** Original upload path. */
+  from: string;
+  /** Path the including file expects (new location). */
+  to: string;
+  /** Including file, at its final location. */
+  includedBy: string;
+}
+
+export interface AmbiguousInclude {
+  /** Path the include expects. */
+  target: string;
+  /** Including file, at its final location. */
+  includedBy: string;
+  /** Uploaded files with the same basename (final locations). */
+  candidates: string[];
+}
+
+export interface PlacementPlan {
+  moves: IncludeMove[];
+  ambiguous: AmbiguousInclude[];
+}
+
+const baseName = (p: string) => p.slice(p.lastIndexOf('/') + 1);
+
+/**
+ * Decides where flat-uploaded include files belong (a browser file picker gives bare names). Pure:
+ * the caller applies the result with `applyMoves`. An unresolved include (relative to the including
+ * file, builtins ignored) is satisfied by the one uploaded file with the same basename, unless that
+ * file is already found by another include at its current path or is also the only candidate for
+ * a different missing path. Several candidates are reported as ambiguous and nothing moves.
+ * Repeats until stable, because a moved file's own includes resolve from its new directory.
+ * Never overwrites an existing path; deterministic (sorted) order.
+ */
+export function placeIncludes(
+  texts: Record<string, string>,
+  builtins: readonly string[] = BUILTIN_INCLUDES,
+): PlacementPlan {
+  const current = new Map<string, string>(); // current path -> original path
+  const content = new Map<string, string>(); // current path -> text
+  for (const [path, text] of Object.entries(texts)) {
+    current.set(path, path);
+    content.set(path, text);
+  }
+  const moves: { original: string; to: string; includer: string }[] = [];
+  let ambiguous: { target: string; includer: string; candidates: string[] }[] = [];
+
+  // Every pass either moves at least one file (which then stays put, as an include resolves it) or stops.
+  for (let pass = 0; pass <= content.size + 1; pass++) {
+    const resolvedNow = new Set<string>();
+    const wanted = new Map<string, string[]>(); // expected path -> includers
+    for (const path of [...content.keys()].sort()) {
+      if (!/\.(ly|ily)$/i.test(path)) continue;
+      for (const target of scan(content.get(path) ?? '').includes) {
+        const resolved = resolveInclude(path, target);
+        if (resolved === undefined) continue;
+        if (content.has(resolved)) resolvedNow.add(resolved);
+        else if (!builtins.includes(target)) wanted.set(resolved, [...(wanted.get(resolved) ?? []), path]);
+      }
+    }
+    const candidatesOf = new Map<string, string[]>();
+    const claims = new Map<string, number>();
+    for (const expected of wanted.keys()) {
+      const list = [...content.keys()].filter((p) => baseName(p) === baseName(expected) && !resolvedNow.has(p)).sort();
+      candidatesOf.set(expected, list);
+      for (const c of list) claims.set(c, (claims.get(c) ?? 0) + 1);
+    }
+    const step: { from: string; to: string; includer: string }[] = [];
+    ambiguous = [];
+    for (const expected of [...wanted.keys()].sort()) {
+      const includer = [...(wanted.get(expected) ?? [])].sort()[0] ?? '';
+      const list = candidatesOf.get(expected) ?? [];
+      const only = list[0];
+      if (list.length === 1 && only !== undefined && claims.get(only) === 1) {
+        step.push({ from: only, to: expected, includer });
+      } else if (list.length > 0) {
+        ambiguous.push({ target: expected, includer, candidates: list });
+      }
+    }
+    if (step.length === 0) break;
+    for (const m of step) {
+      const original = current.get(m.from);
+      const text = content.get(m.from);
+      if (original === undefined || text === undefined) continue;
+      current.delete(m.from);
+      content.delete(m.from);
+      current.set(m.to, original);
+      content.set(m.to, text);
+      moves.push({ original, to: m.to, includer: m.includer });
+    }
+  }
+
+  // Report with the final location of every file.
+  const finalOf = new Map<string, string>();
+  for (const [path, original] of current) finalOf.set(original, path);
+  const originalOf = new Map(moves.map((m) => [m.to, m.original]));
+  const at = (path: string) => finalOf.get(originalOf.get(path) ?? path) ?? path;
+  return {
+    moves: moves.map((m) => ({ from: m.original, to: finalOf.get(m.original) ?? m.to, includedBy: at(m.includer) })),
+    ambiguous: ambiguous.map((a) => ({ target: a.target, includedBy: at(a.includer), candidates: a.candidates })),
+  };
+}
+
+/** Applies `placeIncludes` moves to any path-keyed map (texts, bytes, ...). Returns a new object. */
+export function applyMoves<T>(
+  files: Record<string, T>,
+  moves: readonly { from: string; to: string }[],
+): Record<string, T> {
+  const target = new Map(moves.map((m) => [m.from, m.to]));
+  const out: Record<string, T> = {};
+  for (const [path, value] of Object.entries(files)) out[target.get(path) ?? path] = value;
+  return out;
+}
+
 /** Parses "2.24.1" style versions to [major, minor]; undefined if unparseable. */
 function parseVersion(raw: string): [number, number] | undefined {
   const m = /^\s*(\d+)\.(\d+)(?:\.\d+)*/.exec(raw);

@@ -3,7 +3,7 @@ import { normalizeLog, parseDiagnostics, type Diagnostic } from './diagnostics.j
 import type { Engine, EngineFormat, EngineRequest, EngineResult } from './engine.js';
 import { groupOutputs, outputFileName } from './outputs.js';
 import { effectiveMarginsMm, effectiveStaffSize, getProfile } from './profiles.js';
-import { analyzeProject, findIncludes, resolveInclude, versionWarnings } from './project.js';
+import { analyzeProject, applyMoves, findIncludes, placeIncludes, resolveInclude, versionWarnings } from './project.js';
 import { buildWrapper } from './wrapper.js';
 
 /** A project file. `path` is relative and POSIX-style, e.g. `songs/a.ly`. */
@@ -167,11 +167,38 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
   const diagnostics: Diagnostic[] = [];
   const logs: Record<string, string> = {};
 
-  const texts: Record<string, string> = {};
-  const engineFiles: Record<string, string | Uint8Array> = {};
+  let texts: Record<string, string> = {};
+  let engineFiles: Record<string, string | Uint8Array> = {};
   for (const f of files) {
     texts[f.path] = isSource(f.path) ? textOf(f.content) : '';
     engineFiles[f.path] = f.content;
+  }
+
+  // Flat uploads (bare file names): move include files to where they are included from.
+  // All paths below (main files, outputs, diagnostics, logs) are the placed paths.
+  const plan = placeIncludes(texts);
+  const moved = new Map(plan.moves.map((m) => [m.from, m.to]));
+  texts = applyMoves(texts, plan.moves);
+  engineFiles = applyMoves(engineFiles, plan.moves);
+  for (const m of plan.moves) {
+    const to = dirOf(m.to);
+    const where = to ? `${to}/` : 'the top folder';
+    diagnostics.push({
+      file: m.includedBy,
+      line: 0,
+      column: 0,
+      severity: 'info',
+      message: `${baseOf(m.to)} was placed in ${where} because ${m.includedBy} includes it from there.`,
+    });
+  }
+  for (const a of plan.ambiguous) {
+    diagnostics.push({
+      file: a.includedBy,
+      line: 0,
+      column: 0,
+      severity: 'warning',
+      message: `Several uploaded files are called ${baseOf(a.target)}; ${a.includedBy} includes ${a.target}. Upload the whole folder instead (Choose a folder) so the right one is used.`,
+    });
   }
 
   const analysis = analyzeProject(texts);
@@ -181,7 +208,7 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
   const brokenFiles = new Set(analysis.missingIncludes.map((m) => m.from));
 
   const mainFiles: string[] = [];
-  for (const main of options.mainFiles ?? analysis.mainFiles) {
+  for (const main of options.mainFiles?.map((m) => moved.get(m) ?? m) ?? analysis.mainFiles) {
     if (!(main in texts)) diagnostics.push(error(main, 'main file is not part of the project'));
     else if (![...reachable(main, texts)].some((p) => brokenFiles.has(p))) mainFiles.push(main);
   }
