@@ -6,7 +6,7 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "declaration": true,
-    "sourceMap": true,
+    "sourceMap": false,
     "composite": true,
     "resolveJsonModule": true,
     "skipLibCheck": true

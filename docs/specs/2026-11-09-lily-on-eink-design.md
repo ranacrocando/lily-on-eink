@@ -106,9 +106,9 @@ npm cannot install a workspace sub-package straight from a git tag. Core is ther
   2. builds the packages;
   3. runs `npm pack` for `core` and `engine-wasm`;
   4. **installs both tarballs into a clean temporary project as a smoke check**, using the same `overrides` entry as the app (see below);
-  5. uploads the `.tgz` files to that same release with `gh release upload --clobber`. The workflow sets `permissions: contents: write` and `GH_TOKEN: ${{ github.token }}`.
+  5. uploads the `.tgz` files to that same release with `gh release upload`, only the assets that are missing (the app lockfile pins integrity hashes, and a rebuilt tarball can differ byte for byte); `--clobber` is used only for a manual run with `force: true`. The workflow sets `permissions: contents: write` and `GH_TOKEN: ${{ github.token }}`.
 - The workflow also runs for prereleases and for drafts once they are published. Releases must be created by a person, because releases created with `GITHUB_TOKEN` do not trigger workflows.
-- Once the repo is public, the app depends on **both** release tarball URLs. `engine-wasm` declares `@lily-on-eink/core` as a normal semver dependency, so the app also adds an `overrides` entry that maps `@lily-on-eink/core` to the core tarball URL. Otherwise npm would look for core on the registry. The lockfile pins the URLs and integrity hashes.
+- Once the repo is public, the app depends on **both** release tarball URLs. `engine-wasm` declares `@lily-on-eink/core` as a normal semver dependency, so the app also adds an `overrides` entry that maps `@lily-on-eink/core` to the core tarball URL. The entry is a safety net: the root's core tarball already satisfies `engine-wasm`'s exact dependency, so npm does not need the registry for core, and the entry guarantees it. The lockfile pins the URLs and integrity hashes.
 
   ```json
   "dependencies": {
