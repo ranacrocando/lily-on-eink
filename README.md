@@ -68,6 +68,19 @@ The convert script takes files or folders, plus `--device`, `--profile`, `--out`
 
 If the version check fails, delete the release and the tag, fix the versions via a PR, and release again. Do not enable GitHub's "immutable releases": it blocks the upload after publishing. To test the tarballs locally, first delete `packages/*/dist` and `*.tsbuildinfo` (stale source maps would end up in the tarballs), then run `npm run build` and `npm pack -w packages/core -w packages/engine-wasm --pack-destination out`, then `node scripts/smoke-install.mjs out`.
 
+## Branch ruleset
+
+The rules for `main` (pull requests only, squash merge, required checks `check` and `title`, no force push, no deletion, linear history) are in `.github/rulesets/main.json`. Rulesets only take effect on public repos (free plan).
+
+```sh
+# create (once; repeating it makes duplicates)
+gh api -X POST repos/ranacrocando/lily-on-eink/rulesets --input .github/rulesets/main.json
+# find the id
+gh api repos/ranacrocando/lily-on-eink/rulesets
+# update later
+gh api -X PUT repos/ranacrocando/lily-on-eink/rulesets/<id> --input .github/rulesets/main.json
+```
+
 ## License
 
 `packages/core` is MIT. `packages/engine-wasm` is GPL-3.0-or-later. Test scores in `corpus/` are licensed per file. See `REUSE.toml` and the design spec, section 2.
