@@ -192,7 +192,8 @@ describe('engine-wasm contract', () => {
   it('preloads the engine and still compiles afterwards', async () => {
     const own = createWasmEngine();
     try {
-      await own.preload?.();
+      expect(own.preload).toBeDefined();
+      await own.preload!();
       const result = await own.compile(req(String.raw`{ c'1 }`));
       expect(result.ok).toBe(true);
     } finally {
@@ -203,6 +204,18 @@ describe('engine-wasm contract', () => {
   it('rejects preload after dispose', async () => {
     const own = createWasmEngine();
     own.dispose();
-    await expect(own.preload?.()).rejects.toThrow('engine disposed');
+    await expect(own.preload!()).rejects.toThrow('engine disposed');
+  });
+
+  it('rejects preload on abort and still compiles afterwards', async () => {
+    const own = createWasmEngine();
+    try {
+      expect(own.preload).toBeDefined();
+      await expect(own.preload!({ signal: AbortSignal.abort() })).rejects.toThrow();
+      const result = await own.compile(req(String.raw`{ c'1 }`));
+      expect(result.ok).toBe(true);
+    } finally {
+      own.dispose();
+    }
   });
 });
