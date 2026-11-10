@@ -15,7 +15,7 @@ function fakeEngine(answer: (req: EngineRequest) => EngineResult | Promise<Engin
       requests.push(req);
       return answer(req);
     },
-    dispose: () => {},
+    dispose: () => undefined,
   };
   return { engine, requests };
 }
@@ -59,7 +59,11 @@ describe('convert', () => {
 
   it('applies profile staff size and margins plus the tagline option', async () => {
     const { engine, requests } = fakeEngine();
-    await convert([{ path: 'a.ly', content: "{ c'1 }" }], { ...sage, profile: 'leadsheet', keepTagline: false }, engine);
+    await convert(
+      [{ path: 'a.ly', content: "{ c'1 }" }],
+      { ...sage, profile: 'leadsheet', keepTagline: false },
+      engine,
+    );
     expect(requests[0]!.source).toContain('(set-global-staff-size 18)');
     expect(requests[0]!.source).toContain(String.raw`left-margin = 6\mm`);
     expect(requests[0]!.source).toContain(String.raw`\header { tagline = ##f }`);
@@ -105,7 +109,12 @@ describe('convert', () => {
     );
     expect(requests.map((r) => r.source)).toEqual([expect.stringContaining(String.raw`\include "b.ly"`)]);
     expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ file: 'inc.ily', line: 1, severity: 'error', message: expect.stringContaining('gone.ily') }),
+      expect.objectContaining({
+        file: 'inc.ily',
+        line: 1,
+        severity: 'error',
+        message: expect.stringContaining('gone.ily'),
+      }),
     );
     expect(result.outputs.map((o) => o.mainFile)).toEqual(['b.ly']);
   });
@@ -122,9 +131,7 @@ describe('convert', () => {
     );
     expect(requests).toHaveLength(1);
     expect(requests[0]!.source).toContain(String.raw`\include "b.ly"`);
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ file: 'nope.ly', severity: 'error' }),
-    );
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ file: 'nope.ly', severity: 'error' }));
   });
 
   it('groups books, warns about unrecognized outputs and normalizes the log', async () => {
@@ -222,7 +229,11 @@ describe('convert', () => {
     );
     expect(requests[0]!.files['x/lily-on-eink.ily']).toBe(OVERLAY_ILY);
     expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ file: 'x/lily-on-eink.ily', severity: 'warning', message: expect.stringContaining('replaced') }),
+      expect.objectContaining({
+        file: 'x/lily-on-eink.ily',
+        severity: 'warning',
+        message: expect.stringContaining('replaced'),
+      }),
     );
   });
 
@@ -236,7 +247,10 @@ describe('convert', () => {
 
 describe('convert version warnings', () => {
   const warned = (r: { diagnostics: { message: string; file: string }[] }) =>
-    r.diagnostics.filter((d) => d.message.includes('LilyPond (')).map((d) => d.file).sort();
+    r.diagnostics
+      .filter((d) => d.message.includes('LilyPond ('))
+      .map((d) => d.file)
+      .sort();
 
   it('warns once per file of the converted project only', async () => {
     const { engine } = fakeEngine();
@@ -247,7 +261,9 @@ describe('convert version warnings', () => {
     ];
     const r = await convert(files, { ...sage, mainFiles: ['a.ly'] }, engine);
     expect(warned(r)).toEqual(['a.ly', 'inc.ily']);
-    expect(r.diagnostics.filter((d) => d.file === 'a.ly' || d.file === 'inc.ily').every((d) => d.severity === 'warning')).toBe(true);
+    expect(
+      r.diagnostics.filter((d) => d.file === 'a.ly' || d.file === 'inc.ily').every((d) => d.severity === 'warning'),
+    ).toBe(true);
   });
 
   it('warns once for an include shared by two main files', async () => {
@@ -263,7 +279,9 @@ describe('convert version warnings', () => {
 
   it('gives no version warning for a file skipped because of a missing include', async () => {
     const { engine, requests } = fakeEngine();
-    const files: ProjectFile[] = [{ path: 'a.ly', content: String.raw`\version "2.18.2" \include "missing.ily" { c'1 }` }];
+    const files: ProjectFile[] = [
+      { path: 'a.ly', content: String.raw`\version "2.18.2" \include "missing.ily" { c'1 }` },
+    ];
     const r = await convert(files, sage, engine);
     expect(requests).toHaveLength(0);
     expect(warned(r)).toEqual([]);

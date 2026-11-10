@@ -1,0 +1,10 @@
+dist
+node_modules
+package-lock.json
+test-output
+coverage
+corpus/**
+*.ly
+*.ily
+docs/**
+*.md

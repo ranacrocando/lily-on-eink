@@ -86,10 +86,10 @@ function readString(src: string, start: number): [string, number] {
   let out = '';
   while (i < src.length && src[i] !== '"') {
     if (src[i] === '\\' && i + 1 < src.length) {
-      out += src[i + 1];
+      out += src.charAt(i + 1);
       i += 2;
     } else {
-      out += src[i];
+      out += src.charAt(i);
       i += 1;
     }
   }
@@ -105,7 +105,7 @@ function findTitle(source: string): string | undefined {
   let headerDepth = -1;
   let i = 0;
   while (i < source.length) {
-    const c = source[i]!;
+    const c = source.charAt(i);
     if (c === '%') {
       const block = source[i + 1] === '{';
       const end = block ? source.indexOf('%}', i + 2) : source.indexOf('\n', i);
@@ -144,7 +144,8 @@ function reachable(main: string, texts: Record<string, string>): Set<string> {
   const seen = new Set<string>();
   const stack = [main];
   while (stack.length) {
-    const path = stack.pop()!;
+    const path = stack.pop();
+    if (path === undefined) break;
     if (seen.has(path)) continue;
     seen.add(path);
     const text = texts[path];
@@ -175,7 +176,7 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
 
   const analysis = analyzeProject(texts);
   for (const { from, target } of analysis.missingIncludes) {
-    diagnostics.push(error(from, `cannot find included file "${target}"`, includeLine(texts[from]!, target)));
+    diagnostics.push(error(from, `cannot find included file "${target}"`, includeLine(texts[from] ?? '', target)));
   }
   const brokenFiles = new Set(analysis.missingIncludes.map((m) => m.from));
 
@@ -250,7 +251,10 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
     diagnostics.push(...parseDiagnostics(log));
     if (!result.ok) {
       diagnostics.push(
-        error(mainFile, result.aborted ? 'conversion aborted or timed out' : `LilyPond failed (exit code ${result.exitCode})`),
+        error(
+          mainFile,
+          result.aborted ? 'conversion aborted or timed out' : `LilyPond failed (exit code ${result.exitCode})`,
+        ),
       );
       progress('failed');
       continue;
@@ -258,9 +262,15 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
 
     const grouped = groupOutputs(result.files);
     for (const name of grouped.unrecognized) {
-      diagnostics.push({ file: mainFile, line: 0, column: 0, severity: 'warning', message: `ignored unexpected engine output "${name}"` });
+      diagnostics.push({
+        file: mainFile,
+        line: 0,
+        column: 0,
+        severity: 'warning',
+        message: `ignored unexpected engine output "${name}"`,
+      });
     }
-    const title = findTitle(texts[mainFile]!);
+    const title = findTitle(texts[mainFile] ?? '');
     for (const book of grouped.books) {
       const out: ConvertOutput = {
         mainFile,

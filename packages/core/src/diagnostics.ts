@@ -22,12 +22,13 @@ export function parseDiagnostics(log: string): Diagnostic[] {
   for (const raw of normalizeLog(log).split('\n')) {
     const m = LINE.exec(raw.replace(/\r$/, ''));
     if (m) {
+      const [, file = '', line, column, severity, message = ''] = m;
       out.push({
-        file: m[1]!,
-        line: Number(m[2]),
-        column: Number(m[3]),
-        severity: m[4] as 'error' | 'warning',
-        message: m[5]!,
+        file,
+        line: Number(line),
+        column: Number(column),
+        severity: severity as 'error' | 'warning',
+        message,
       });
     }
   }
