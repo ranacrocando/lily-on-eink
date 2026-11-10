@@ -224,8 +224,12 @@ describe('corpus on kobo-sage', () => {
       extraPaper: 'indent = 0',
     });
     files[`${dir}/${wrapper.overlay.name}`] = wrapper.overlay.content;
+    // Without the configure! call the overlay's book handler stays idle, so it does not widen
+    // the indent for the instrument name again; the wrapper's \paper still sets the page.
+    const source = wrapper.source.replace(/^#\(lily-on-eink:configure! [^]*?\)\)\)\n/m, '');
+    expect(source).not.toBe(wrapper.source);
     const result = await engine.compile({
-      source: wrapper.source,
+      source,
       filename: `${dir}/lily-on-eink-wrapper.ly`,
       files,
       formats: ['png'],
@@ -589,5 +593,40 @@ describe('device paper inside \\book and \\bookpart on kobo-sage', () => {
     let ink = 0;
     for (let i = Math.floor(0.85 * height) * width * 4; i < data.length; i += 4) if (data[i]! < 128) ink++;
     expect(ink).toBe(0);
+  });
+});
+
+describe('instrument names on kobo-sage', () => {
+  const RIGHT = String.raw`\relative c'' { \repeat unfold 16 { c4 d e f } }`;
+  const LEFT = String.raw`\relative c { \clef bass \repeat unfold 16 { c4 g c g } }`;
+  const NAMES = [
+    {
+      name: 'piano',
+      source: String.raw`\new PianoStaff \with { instrumentName = "Piano" shortInstrumentName = "Pno." } << \new Staff ${RIGHT} \new Staff ${LEFT} >>`,
+    },
+    {
+      name: 'long-name',
+      source: String.raw`\new Staff \with { instrumentName = "Klavier rechts" } ${RIGHT}`,
+    },
+    {
+      name: 'layout-indent-0',
+      source: String.raw`\score {
+  \new Staff { \set Staff.instrumentName = "Klavier rechts" \set Staff.shortInstrumentName = "Kl. re." ${RIGHT} }
+  \layout { indent = 0 short-indent = 0 }
+}`,
+    },
+  ];
+
+  it.each(NAMES)('$name keeps the instrument names out of the edge band', async ({ name, source }) => {
+    const result = await convert(
+      [{ path: `${name}.ly`, content: source }],
+      { device: 'kobo-sage', outputs: ['png'], keepTagline: false },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const pages = result.outputs[0]!.pngPages!;
+    expect(pages.length).toBeGreaterThan(0);
+    savePages(`names-${name}`, pages);
+    for (const page of pages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
   });
 });

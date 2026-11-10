@@ -370,10 +370,81 @@ are reflowed into rows first."
      (set 'oddFooterMarkup lilyOnEinkFooterMarkup)
      (set 'evenFooterMarkup lilyOnEinkFooterMarkup)))
 
+% --- Instrument names inside the margin ---
+% LilyPond draws instrument names to the left of the system start, in the space that indent
+% (first system) and short-indent (later systems) leave free. A name wider than that space
+% runs into the margin and off the page. The book handler therefore collects the names from
+% the music of each score, measures them, and widens indent or short-indent where needed.
+% It never narrows them, so files without names (or with short ones) keep their layout.
+
+% Room left of a name for the brace or bracket of a staff group and the name's padding, in mm.
+#(define lily-on-eink:name-allowance-mm 3)
+
+% The values of @var{property} (instrumentName or shortInstrumentName) found in @var{music}:
+% in \set commands and in the \with blocks of \new and \context.
+#(define (lily-on-eink:name-values music property)
+   (let walk ((m music))
+     (append
+      (if (and (eq? 'PropertySet (ly:music-property m 'name))
+               (eq? property (ly:music-property m 'symbol)))
+          (list (ly:music-property m 'value))
+          '())
+      (filter-map (lambda (op)
+                    (and (pair? op) (eq? 'assign (car op)) (pair? (cdr op))
+                         (eq? property (cadr op)) (pair? (cddr op))
+                         (caddr op)))
+                  (let ((ops (ly:music-property m 'property-operations)))
+                    (if (list? ops) ops '())))
+      (append-map walk (filter ly:music? (ly:music-property m 'elements)))
+      (let ((e (ly:music-property m 'element)))
+        (if (ly:music? e) (walk e) '())))))
+
+% Width in mm of the widest @var{property} value in @var{scores}, measured with the text
+% settings of @var{paper}. Markup stencils are in staff spaces; output-scale is the staff
+% space in mm.
+#(define (lily-on-eink:widest-name-mm paper scores property)
+   (let ((props (layout-extract-page-properties paper))
+         (scale (ly:output-def-lookup paper 'output-scale 1)))
+     (fold max 0
+           (map (lambda (value)
+                  (* scale (lily-on-eink:width (interpret-markup paper props value))))
+                (filter markup?
+                        (append-map (lambda (score)
+                                      (lily-on-eink:name-values (ly:score-music score) property))
+                                    scores))))))
+
+% Raises @var{variable} of output definition @var{def} to at least @var{needed-mm}. With
+% @var{local-only}, only when @var{def} sets the variable itself.
+#(define (lily-on-eink:raise-to! def variable needed-mm local-only)
+   (if (or (not local-only) (module-local-variable (ly:output-def-scope def) variable))
+       (let ((needed (* needed-mm (ly:output-def-lookup def 'mm 1))))
+         (if (< (ly:output-def-lookup def variable 0) needed)
+             (ly:output-def-set-variable! def variable needed)))))
+
+% Widens indent and short-indent so that the instrument names of the scores of @var{book}
+% fit: in @var{paper}, and in a score's own \layout where that sets them.
+#(define (lily-on-eink:fit-names! paper book)
+   (let ((scores (filter ly:score? (ly:book-scores book))))
+     (for-each
+      (lambda (property variable)
+        (let ((width (lily-on-eink:widest-name-mm paper scores property)))
+          (if (> width 0)
+              (let ((needed (+ width lily-on-eink:name-allowance-mm)))
+                (lily-on-eink:raise-to! paper variable needed #f)
+                (for-each (lambda (score)
+                            (for-each (lambda (def) (lily-on-eink:raise-to! def variable needed #t))
+                                      (ly:score-output-defs score)))
+                          scores)))))
+      '(instrumentName shortInstrumentName)
+      '(indent short-indent))))
+
 % Applies the device settings to the paper of @var{book} and of all its book parts.
 #(define (lily-on-eink:apply-device-to-book! book)
    (let ((paper (ly:book-paper book)))
-     (if (ly:output-def? paper) (lily-on-eink:apply-device! paper)))
+     (if (ly:output-def? paper)
+         (begin
+           (lily-on-eink:apply-device! paper)
+           (lily-on-eink:fit-names! paper book))))
    (for-each lily-on-eink:apply-device-to-book! (ly:book-book-parts book)))
 
 #(define lily-on-eink:toplevel-book-handler toplevel-book-handler)

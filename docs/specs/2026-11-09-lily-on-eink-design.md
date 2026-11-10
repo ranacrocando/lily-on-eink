@@ -203,6 +203,7 @@ The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, be
 - The score hook walks the score's music, context mods and `\layout` context definitions for `instrumentName` / `shortInstrumentName`.
 - It measures them with `interpret-markup` and sets `indent` / `short-indent` to the measured width plus padding (2 mm). If there are no names, the indent is 0.
 - This needs no TypeScript heuristic.
+- **Current implementation** (in the book handler, see "Device paper inside `\book` and `\bookpart`"): for each book and book part it collects `instrumentName` and `shortInstrumentName` values from the music of its scores (`\set` commands and the `\with` blocks of `\new`/`\context`), measures the widest of each with `interpret-markup` and the paper's text settings (stencil width in staff spaces × `output-scale` = mm), and raises `indent` / `short-indent` to that width plus 3 mm (`lily-on-eink:name-allowance-mm`: room for a group's brace or bracket and the name's padding). It raises them in the paper and in a score's own `\layout` where that sets them (e.g. `indent = 0`). It never lowers them: files without names keep LilyPond's default indent, so page counts do not change. Names set in `\layout` context definitions are not collected yet.
 
 **Titles.**
 - The overlay defines **custom markup commands** (MIT, written from scratch):

@@ -21,7 +21,8 @@ export interface Wrapper {
 // - custom page headers and footers (odd/even Header/FooterMarkup) and a user's
 //   bookTitleMarkup (also `= ##f`) are replaced by the overlay's markups.
 // Deliberately no set-paper-size (it would rescale margins and indent from A4)
-// and no indent override.
+// and no indent override here: the overlay's book handler widens indent and short-indent
+// only where instrument names need it.
 
 /**
  * Extra left margin (mm) on top of the profile margin. LilyPond draws system-start brackets,
