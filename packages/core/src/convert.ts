@@ -320,6 +320,8 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
 
     const grouped = groupOutputs(result.files);
     for (const name of grouped.unrecognized) {
+      // MIDI from a user \midi block is expected and not needed for e-reader output.
+      if (/\.midi?$/i.test(name)) continue;
       diagnostics.push({
         file: mainFile,
         line: 0,
