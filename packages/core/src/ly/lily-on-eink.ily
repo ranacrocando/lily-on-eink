@@ -395,10 +395,13 @@ are reflowed into rows first."
 % default) and below the last one (last-bottom-spacing, 30). A page with few tall systems (a
 % song sheet with chord diagrams, tab and lyrics: two systems per page) then puts all its free
 % space into one or two gaps. The overlay makes the space below the last system as stretchable
-% as lily-on-eink:bottom-stretch-gaps system gaps. Free space so goes mostly into the gaps on a
-% page with many systems (the page still looks filled; there is little free space anyway) and
-% mostly below the last system on a page with few systems (no huge gaps). Full pages are not
-% stretched at all, so they do not change. A larger stretchability set by the user is kept.
+% as lily-on-eink:bottom-stretch-gaps system gaps. Free space therefore goes mostly into the
+% gaps on a page with many systems (the page still looks filled; there is little free space
+% anyway) and mostly below the last system on a page with few systems (no huge gaps). A page
+% without free space is not stretched, so its spacing does not change. A larger bottom
+% stretchability set by the user is kept; a smaller one is raised. Stretchability also enters
+% LilyPond's page-breaking penalties, so page breaks could in principle change (none did on
+% the corpus).
 #(define lily-on-eink:bottom-stretch-gaps 4)
 
 #(define (lily-on-eink:limit-fill! paper)
