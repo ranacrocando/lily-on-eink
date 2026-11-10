@@ -247,7 +247,10 @@ describe('convert', () => {
 
 describe('convert version warnings', () => {
   const warned = (r: { diagnostics: { message: string; file: string }[] }) =>
-    r.diagnostics.filter((d) => d.message.includes('LilyPond (')).map((d) => d.file).sort();
+    r.diagnostics
+      .filter((d) => d.message.includes('LilyPond ('))
+      .map((d) => d.file)
+      .sort();
 
   it('warns once per file of the converted project only', async () => {
     const { engine } = fakeEngine();
@@ -258,7 +261,9 @@ describe('convert version warnings', () => {
     ];
     const r = await convert(files, { ...sage, mainFiles: ['a.ly'] }, engine);
     expect(warned(r)).toEqual(['a.ly', 'inc.ily']);
-    expect(r.diagnostics.filter((d) => d.file === 'a.ly' || d.file === 'inc.ily').every((d) => d.severity === 'warning')).toBe(true);
+    expect(
+      r.diagnostics.filter((d) => d.file === 'a.ly' || d.file === 'inc.ily').every((d) => d.severity === 'warning'),
+    ).toBe(true);
   });
 
   it('warns once for an include shared by two main files', async () => {
@@ -274,7 +279,9 @@ describe('convert version warnings', () => {
 
   it('gives no version warning for a file skipped because of a missing include', async () => {
     const { engine, requests } = fakeEngine();
-    const files: ProjectFile[] = [{ path: 'a.ly', content: String.raw`\version "2.18.2" \include "missing.ily" { c'1 }` }];
+    const files: ProjectFile[] = [
+      { path: 'a.ly', content: String.raw`\version "2.18.2" \include "missing.ily" { c'1 }` },
+    ];
     const r = await convert(files, sage, engine);
     expect(requests).toHaveLength(0);
     expect(warned(r)).toEqual([]);
