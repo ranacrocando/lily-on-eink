@@ -3,7 +3,15 @@ import { normalizeLog, parseDiagnostics, type Diagnostic } from './diagnostics.j
 import type { Engine, EngineFormat, EngineRequest, EngineResult } from './engine.js';
 import { groupOutputs, outputFileName } from './outputs.js';
 import { effectiveMarginsMm, effectiveStaffSize, getProfile } from './profiles.js';
-import { analyzeProject, findIncludes, resolveInclude, versionWarnings } from './project.js';
+import {
+  analyzeProject,
+  applyMoves,
+  findIncludes,
+  includeLine,
+  placeIncludes,
+  resolveInclude,
+  versionWarnings,
+} from './project.js';
 import { buildWrapper } from './wrapper.js';
 
 /** A project file. `path` is relative and POSIX-style, e.g. `songs/a.ly`. */
@@ -30,7 +38,7 @@ export interface ConvertOptions {
   keepTagline?: boolean;
   /** Default ['pdf']. PNG pages are rendered at the device ppi. */
   outputs?: EngineFormat[];
-  /** Overrides main-file detection. */
+  /** Overrides main-file detection. Accepts uploaded or placed paths; results use placed paths. */
   mainFiles?: string[];
   signal?: AbortSignal;
   /** Per main file. Default 60000. */
@@ -65,19 +73,17 @@ const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) :
 const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const inDir = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 
+/** "a", "a and b", "a, b and c". */
+function listOf(items: string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] ?? ''}`;
+}
+
 function textOf(content: Uint8Array | string): string {
   return typeof content === 'string' ? content : new TextDecoder().decode(content);
 }
 
 function error(file: string, message: string, line = 0): Diagnostic {
   return { file, line, column: 0, severity: 'error', message };
-}
-
-/** Line (1-based) of `\include "target"` in source, or 0 if not found. */
-function includeLine(source: string, target: string): number {
-  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = new RegExp(String.raw`\\include\s*"${escaped}"`).exec(source);
-  return m ? source.slice(0, m.index).split('\n').length : 0;
 }
 
 /** Reads a LilyPond string literal starting at the opening quote; returns [value, indexAfter]. */
@@ -167,11 +173,49 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
   const diagnostics: Diagnostic[] = [];
   const logs: Record<string, string> = {};
 
-  const texts: Record<string, string> = {};
-  const engineFiles: Record<string, string | Uint8Array> = {};
+  let texts: Record<string, string> = {};
+  let engineFiles: Record<string, string | Uint8Array> = {};
   for (const f of files) {
     texts[f.path] = isSource(f.path) ? textOf(f.content) : '';
     engineFiles[f.path] = f.content;
+  }
+
+  // Flat uploads (bare file names): move include files to where they are included from.
+  // All paths below (main files, outputs, diagnostics, logs) are the placed paths.
+  const plan = placeIncludes(texts);
+  // A file wanted at several paths is copied to each; one info per file lists them all.
+  const placedBy = new Map<string, string>(); // uploaded or placed path -> first includer
+  const byFrom = new Map<string, typeof plan.moves>();
+  for (const m of plan.moves) {
+    byFrom.set(m.from, [...(byFrom.get(m.from) ?? []), m]);
+    placedBy.set(m.from, placedBy.get(m.from) ?? m.includedBy);
+    placedBy.set(m.to, m.includedBy);
+  }
+  texts = applyMoves(texts, plan);
+  engineFiles = applyMoves(engineFiles, plan);
+  for (const group of byFrom.values()) {
+    const first = group[0];
+    if (!first) continue;
+    const where = listOf(group.map((m) => `${dirOf(m.to)}/`));
+    const includers = [...new Set(group.map((m) => m.includedBy))];
+    const who = `${listOf(includers)} ${includers.length === 1 ? 'includes' : 'include'}`;
+    diagnostics.push({
+      file: first.includedBy,
+      line: first.line,
+      column: 0,
+      severity: 'info',
+      message: `${baseOf(first.to)} was placed in ${where} because ${who} it from there.`,
+    });
+  }
+  if (plan.gaveUp) {
+    diagnostics.push({
+      file: '',
+      line: 0,
+      column: 0,
+      severity: 'warning',
+      message:
+        'The include structure could not be sorted out automatically. Upload the whole project folder so the folder structure is kept.',
+    });
   }
 
   const analysis = analyzeProject(texts);
@@ -181,7 +225,21 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
   const brokenFiles = new Set(analysis.missingIncludes.map((m) => m.from));
 
   const mainFiles: string[] = [];
-  for (const main of options.mainFiles ?? analysis.mainFiles) {
+  const requested = (options.mainFiles ?? analysis.mainFiles).flatMap((m) => {
+    const by = placedBy.get(m);
+    if (options.mainFiles && by !== undefined) {
+      diagnostics.push({
+        file: m,
+        line: 0,
+        column: 0,
+        severity: 'info',
+        message: `${m} is included by ${by}, so it is not converted on its own.`,
+      });
+      return [];
+    }
+    return [m];
+  });
+  for (const main of requested) {
     if (!(main in texts)) diagnostics.push(error(main, 'main file is not part of the project'));
     else if (![...reachable(main, texts)].some((p) => brokenFiles.has(p))) mainFiles.push(main);
   }
