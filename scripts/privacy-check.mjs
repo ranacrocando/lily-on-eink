@@ -44,7 +44,11 @@ const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer
 function loadDenylist() {
   const parts = [process.env.PRIVACY_DENYLIST ?? ''];
   if (existsSync('.privacy-denylist')) parts.push(readFileSync('.privacy-denylist', 'utf8'));
-  return parts.join('\n').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  return parts
+    .join('\n')
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function main() {
@@ -80,7 +84,10 @@ function main() {
     }
   }
   const raw = git('log', ...range, '--format=%H%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%B%x1e');
-  for (const rec of raw.split('\x1e').map((r) => r.replace(/^\n/, '')).filter(Boolean)) {
+  for (const rec of raw
+    .split('\x1e')
+    .map((r) => r.replace(/^\n/, ''))
+    .filter(Boolean)) {
     const [sha, an, ae, cn, ce, body] = rec.split('\x1f');
     const rules = new Set(checkText([an, ae, cn, ce, body].join('\n'), { denylist }).map((f) => f.rule));
     for (const rule of rules) out.push(`commit ${sha} ${rule}`);

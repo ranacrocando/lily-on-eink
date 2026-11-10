@@ -5,13 +5,32 @@ describe('devices', () => {
   it('computes the page size in mm', () => {
     expect(pageSizeMm(getDevice('kobo-sage'))).toEqual({ width: 121.92, height: 162.56 });
   });
-it('computes the reMarkable 2 page size', () => {    expect(pageSizeMm(getDevice('remarkable-2'))).toEqual({ width: 157.79, height: 210.39 });  });  it('has portrait orientation for every preset', () => {    for (const d of listDevices()) {      const { width, height } = pageSizeMm(d);      expect(width, d.id).toBeLessThan(height);    }  });
+  it('computes the reMarkable 2 page size', () => {
+    expect(pageSizeMm(getDevice('remarkable-2'))).toEqual({ width: 157.79, height: 210.39 });
+  });
+  it('has portrait orientation for every preset', () => {
+    for (const d of listDevices()) {
+      const { width, height } = pageSizeMm(d);
+      expect(width, d.id).toBeLessThan(height);
+    }
+  });
   it('lists the presets', () => {
     expect(listDevices().map((d) => d.id)).toEqual([
-      'kobo-sage', 'kobo-clara-bw', 'remarkable-2',
-      'kobo-libra-2', 'kobo-libra-colour', 'kobo-clara-2e', 'kobo-elipsa-2e',
-      'kindle-paperwhite-2021', 'kindle-paperwhite-2024', 'kindle-scribe', 'kindle-oasis-2019',
-      'pocketbook-inkpad-4', 'pocketbook-era', 'boox-note-air3', 'remarkable-paper-pro',
+      'kobo-sage',
+      'kobo-clara-bw',
+      'remarkable-2',
+      'kobo-libra-2',
+      'kobo-libra-colour',
+      'kobo-clara-2e',
+      'kobo-elipsa-2e',
+      'kindle-paperwhite-2021',
+      'kindle-paperwhite-2024',
+      'kindle-scribe',
+      'kindle-oasis-2019',
+      'pocketbook-inkpad-4',
+      'pocketbook-era',
+      'boox-note-air3',
+      'remarkable-paper-pro',
     ]);
   });
   it('has sane, sourced values for every preset', () => {
@@ -36,8 +55,14 @@ it('computes the reMarkable 2 page size', () => {    expect(pageSizeMm(getDevice
   });
   it('accepts a custom device object', () => {
     const custom: DeviceSpec = {
-      id: 'x', name: 'X', widthPx: 600, heightPx: 800, ppi: 200,
-      safeAreaMm: { top: 0, right: 0, bottom: 0, left: 0 }, staffSizeAdjust: 0, source: 'test',
+      id: 'x',
+      name: 'X',
+      widthPx: 600,
+      heightPx: 800,
+      ppi: 200,
+      safeAreaMm: { top: 0, right: 0, bottom: 0, left: 0 },
+      staffSizeAdjust: 0,
+      source: 'test',
     };
     expect(getDevice(custom)).toBe(custom);
     expect(pageSizeMm(custom)).toEqual({ width: 76.2, height: 101.6 });

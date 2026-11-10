@@ -29,10 +29,10 @@ function readString(src: string, start: number): [string, number] {
   let out = '';
   while (i < src.length && src[i] !== '"') {
     if (src[i] === '\\' && i + 1 < src.length) {
-      out += src[i + 1];
+      out += src.charAt(i + 1);
       i += 2;
     } else {
-      out += src[i];
+      out += src.charAt(i);
       i += 1;
     }
   }
@@ -118,7 +118,9 @@ export function analyzeProject(
   const versions: Record<string, string> = {};
   for (const path of Object.keys(files).sort()) {
     if (!/\.(ly|ily)$/i.test(path)) continue;
-    const { includes, version } = scan(files[path]!);
+    const text = files[path];
+    if (text === undefined) continue;
+    const { includes, version } = scan(text);
     if (version !== undefined) versions[path] = version;
     for (const target of includes) {
       const resolved = resolveInclude(path, target);

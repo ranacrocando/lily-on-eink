@@ -3,9 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Engine, EngineRequest } from '@lily-on-eink/core';
 import { createWasmEngine } from '@lily-on-eink/engine-wasm';
 
-const engineVersion = JSON.parse(
-  readFileSync(new URL('../engine-version.json', import.meta.url), 'utf8'),
-) as { lilypond: string };
+const engineVersion = JSON.parse(readFileSync(new URL('../engine-version.json', import.meta.url), 'utf8')) as {
+  lilypond: string;
+};
 
 const MM_PER_PT = 25.4 / 72;
 
@@ -87,15 +87,11 @@ describe('engine-wasm contract', () => {
       req(String.raw`\book { { c1 } } \book { { d1 } }`, { formats: ['pdf', 'png'], resolution: 50 }),
     );
     expect(result.ok).toBe(true);
-    expect(Object.keys(result.files).sort()).toEqual(
-      ['score-1.pdf', 'score-1.png', 'score.pdf', 'score.png'],
-    );
+    expect(Object.keys(result.files).sort()).toEqual(['score-1.pdf', 'score-1.png', 'score.pdf', 'score.png']);
   });
 
   it('names multi-page PNGs score-page1.png, score-page2.png, ...', async () => {
-    const result = await engine.compile(
-      req(`${smallPaper}\n${longMusic}`, { formats: ['png'], resolution: 50 }),
-    );
+    const result = await engine.compile(req(`${smallPaper}\n${longMusic}`, { formats: ['png'], resolution: 50 }));
     expect(result.ok).toBe(true);
     const names = naturalSort(Object.keys(result.files));
     expect(names.length).toBeGreaterThanOrEqual(2);
@@ -159,7 +155,9 @@ describe('engine-wasm contract', () => {
 
   it('aborts via signal and compiles again afterwards on the same engine', async () => {
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 300);
+    setTimeout(() => {
+      controller.abort();
+    }, 300);
     const aborted = await engine.compile(req(veryLongMusic, { signal: controller.signal }));
     expect(aborted).toMatchObject({ ok: false, exitCode: -1, aborted: true, files: {} });
 
@@ -192,7 +190,7 @@ describe('engine-wasm contract', () => {
   it('preloads the engine and still compiles afterwards', async () => {
     const own = createWasmEngine();
     try {
-      expect(own.preload).toBeDefined();
+      expect(typeof own.preload).toBe('function');
       await own.preload!();
       const result = await own.compile(req(String.raw`{ c'1 }`));
       expect(result.ok).toBe(true);
@@ -210,7 +208,7 @@ describe('engine-wasm contract', () => {
   it('rejects preload on abort and still compiles afterwards', async () => {
     const own = createWasmEngine();
     try {
-      expect(own.preload).toBeDefined();
+      expect(typeof own.preload).toBe('function');
       await expect(own.preload!({ signal: AbortSignal.abort() })).rejects.toThrow();
       const result = await own.compile(req(String.raw`{ c'1 }`));
       expect(result.ok).toBe(true);
