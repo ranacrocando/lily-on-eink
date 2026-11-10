@@ -16,5 +16,5 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 [[annotations]]
 path = ["corpus/**/*.ly"]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "lily-on-eink contributors"
+SPDX-FileCopyrightText = "The respective authors, see corpus/SOURCES.md"
 SPDX-License-Identifier = "CC0-1.0"
