@@ -44,7 +44,7 @@ Include files go into the same `files` array, with paths relative to the project
 
 ## Devices and profiles
 
-Device ids include `kobo-sage`, `kindle-paperwhite-2024`, `remarkable-2` and `boox-note-air3`; call `listDevices()` for the full list. Profiles are `generic`, `organ`, `piano`, `leadsheet`, `tab` and `accordion`. For a device that is not listed, pass a `DeviceSpec` object (pixel size, ppi, safe area) instead of an id.
+Device ids include `kobo-sage`, `kindle-paperwhite-2024`, `remarkable-2` and `boox-note-air3`; call `listDevices()` for the full list. Profiles are `generic`, `organ`, `piano`, `leadsheet`, `tab` and `accordion`. For a device that is not listed, pass a `DeviceSpec` object (see `packages/core/src/devices.ts`) instead of an id.
 
 ## Security
 
