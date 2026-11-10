@@ -11,6 +11,6 @@ export default defineConfig({
     include: ['packages/*/test/**/*.test.ts'],
     testTimeout: 120_000,
     hookTimeout: 60_000,
-    fileParallelism: false,
-  }, // never two WASM engines at once
+    fileParallelism: false, // never two WASM engines at once
+  },
 });
