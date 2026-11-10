@@ -2,7 +2,7 @@
 
 Converts LilyPond files to PDFs sized for an e-reader screen. This repository holds the core library (a LilyPond overlay, device presets, genre profiles and a TypeScript API) and a Node engine adapter.
 
-If you only want PDFs, use the hosted app: https://ranacrocando.github.io/lily-on-eink-app/
+If you only want PDFs, use the hosted app: [lily-on-eink-app](https://ranacrocando.github.io/lily-on-eink-app/) ([source](https://github.com/ranacrocando/lily-on-eink-app)).
 
 ## Install
 
