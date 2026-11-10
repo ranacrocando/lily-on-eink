@@ -8,8 +8,15 @@ export interface WrapperOptions {
   staffSize: number;
   keepTagline: boolean;
   lilypondVersion: string;
-  /** Test only: raw lines appended to the \paper block. Not exposed through convert(). */
+  /**
+   * Test only: raw lines appended to the \paper block. Not exposed through convert(). Paper
+   * size, margins, line-width, indent and short-indent set here are overwritten by the
+   * overlay's book handler (indents only where instrument names need more room), unless
+   * `omitConfigure` is set.
+   */
   extraPaper?: string;
+  /** Test only: leave out the configure! call, so the overlay's book handler stays idle. */
+  omitConfigure?: boolean;
 }
 
 export interface Wrapper {
@@ -48,9 +55,13 @@ export function buildWrapper(opts: WrapperOptions): Wrapper {
     String.raw`\include "lily-on-eink.ily"`,
     // Device settings for the overlay's book handler, which re-applies them to the paper of
     // every \book and \bookpart (their own \paper blocks included) just before it is printed.
-    String.raw`#(lily-on-eink:configure! '((paper-width . ${num(opts.pageMm.width)}) (paper-height . ${num(opts.pageMm.height)})`,
-    String.raw`  (top-margin . ${num(m.top)}) (bottom-margin . ${num(m.bottom)}) (left-margin . ${num(left)}) (right-margin . ${num(m.right)})`,
-    String.raw`  (staff-size . ${num(opts.staffSize)}) (keep-tagline . ${opts.keepTagline ? '#t' : '#f'})))`,
+    ...(opts.omitConfigure
+      ? []
+      : [
+          String.raw`#(lily-on-eink:configure! '((paper-width . ${num(opts.pageMm.width)}) (paper-height . ${num(opts.pageMm.height)})`,
+          String.raw`  (top-margin . ${num(m.top)}) (bottom-margin . ${num(m.bottom)}) (left-margin . ${num(left)}) (right-margin . ${num(m.right)})`,
+          String.raw`  (staff-size . ${num(opts.staffSize)}) (keep-tagline . ${opts.keepTagline ? '#t' : '#f'})))`,
+        ]),
     String.raw`\include "${escapeLilyString(opts.mainBasename)}"`,
     String.raw`\paper {`,
     String.raw`  paper-width = ${num(opts.pageMm.width)}\mm`,

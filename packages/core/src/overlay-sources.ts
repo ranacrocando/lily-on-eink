@@ -235,16 +235,26 @@ lilyOnEinkPageHeaderMarkup = \markup \lily-on-eink-page-header
 #(define (lily-on-eink:beside left right gap)
    (ly:stencil-combine-at-edge left X RIGHT right gap))
 
-% Joins each item that is followed by a much taller item (a verse number before its verse)
-% with that item, so that a row break never separates them.
+% Joins items so that a row break never separates them: an item without height (an
+% \hspace) with the item after it, then an item followed by a much taller item (a verse
+% number before its verse) with that item. A trailing item without height is dropped.
 #(define (lily-on-eink:glue-labels stils gap)
-   (let loop ((rest stils) (done '()))
-     (cond
-      ((null? rest) (reverse done))
-      ((and (pair? (cdr rest))
-            (> (lily-on-eink:height (cadr rest)) (* 1.5 (lily-on-eink:height (car rest)))))
-       (loop (cddr rest) (cons (lily-on-eink:beside (car rest) (cadr rest) gap) done)))
-      (else (loop (cdr rest) (cons (car rest) done))))))
+   (let ((spaced
+          (let loop ((rest stils) (done '()))
+            (cond
+             ((null? rest) (reverse done))
+             ((ly:stencil-empty? (car rest) Y)
+              (if (pair? (cdr rest))
+                  (loop (cons (lily-on-eink:beside (car rest) (cadr rest) gap) (cddr rest)) done)
+                  (loop (cdr rest) done)))
+             (else (loop (cdr rest) (cons (car rest) done)))))))
+     (let loop ((rest spaced) (done '()))
+       (cond
+        ((null? rest) (reverse done))
+        ((and (pair? (cdr rest))
+              (> (lily-on-eink:height (cadr rest)) (* 1.5 (lily-on-eink:height (car rest)))))
+         (loop (cddr rest) (cons (lily-on-eink:beside (car rest) (cadr rest) gap) done)))
+        (else (loop (cdr rest) (cons (car rest) done)))))))
 
 % Stacks stencils top down, flush left, @var{gap} apart (ink extents).
 #(define (lily-on-eink:stack-flush-left stils gap)
@@ -253,20 +263,53 @@ lilyOnEinkPageHeaderMarkup = \markup \lily-on-eink-page-header
          (lily-on-eink:flush-left (car stils))
          (cdr stils)))
 
-% Lays out stencils left to right, @var{gap} apart, starting a new row whenever the next one
-% would cross @var{width} (first fit). Rows are stacked top down, @var{row-gap} apart.
-#(define (lily-on-eink:rows stils width gap row-gap)
-   (let loop ((rest stils) (row #f) (rows '()))
+% Splits stencils into rows (lists) that fit @var{width} with @var{gap} between items (first
+% fit). An item wider than the line gets a row of its own.
+#(define (lily-on-eink:split-rows stils width gap)
+   (let loop ((rest stils) (row '()) (row-width 0) (rows '()))
      (cond
-      ((null? rest)
-       (let ((rows (reverse (if row (cons row rows) rows))))
-         (if (null? rows) empty-stencil (lily-on-eink:stack-flush-left rows row-gap))))
-      ((not row) (loop (cdr rest) (car rest) rows))
+      ((null? rest) (reverse (if (null? row) rows (cons (reverse row) rows))))
+      ((null? row)
+       (loop (cdr rest) (list (car rest)) (lily-on-eink:width (car rest)) rows))
       (else
-       (let ((longer (lily-on-eink:beside row (car rest) gap)))
-         (if (<= (lily-on-eink:width longer) width)
-             (loop (cdr rest) longer rows)
-             (loop (cdr rest) (car rest) (cons row rows))))))))
+       (let ((longer (+ row-width gap (lily-on-eink:width (car rest)))))
+         (if (<= longer width)
+             (loop (cdr rest) (cons (car rest) row) longer rows)
+             (loop rest '() 0 (cons (reverse row) rows))))))))
+
+% Places the items of one row at the given X offsets, flush left each.
+#(define (lily-on-eink:row-at stils offsets)
+   (fold (lambda (stil x row)
+           (ly:stencil-add row (ly:stencil-translate-axis (lily-on-eink:flush-left stil) x X)))
+         empty-stencil stils offsets))
+
+% Lays out stencils left to right in rows that fit @var{width} (first fit), @var{gap} apart;
+% rows are stacked top down, @var{row-gap} apart. When every row has the same number of items
+% and a common column grid fits the line, the items are aligned in columns.
+#(define (lily-on-eink:rows stils width gap row-gap)
+   (let* ((rows (lily-on-eink:split-rows stils width gap))
+          (count (if (pair? rows) (length (car rows)) 0))
+          (columns (and (> count 1) (pair? (cdr rows))
+                        (every (lambda (row) (= count (length row))) rows)
+                        (apply map (lambda column (apply max (map lily-on-eink:width column)))
+                               rows)))
+          (offsets (and columns
+                        (reverse (cdr (fold (lambda (w acc) (cons (+ (car acc) w gap) acc))
+                                            '(0) columns)))))
+          (grid? (and columns (<= (+ (apply + columns) (* gap (1- count))) width))))
+     (if (null? rows)
+         empty-stencil
+         (lily-on-eink:stack-flush-left
+          (map (lambda (row)
+                 (lily-on-eink:row-at
+                  row
+                  (if grid?
+                      offsets
+                      (reverse (cdr (fold (lambda (s acc)
+                                            (cons (+ (car acc) (lily-on-eink:width s) gap) acc))
+                                          '(0) row))))))
+               rows)
+          row-gap))))
 
 #(define-markup-command (lily-on-eink-flow layout props original items) (markup? markup-list?)
    "Draws @var{original} when it fits the line width. Otherwise draws @var{items} left to
@@ -372,13 +415,32 @@ are reflowed into rows first."
 
 % --- Instrument names inside the margin ---
 % LilyPond draws instrument names to the left of the system start, in the space that indent
-% (first system) and short-indent (later systems) leave free. A name wider than that space
-% runs into the margin and off the page. The book handler therefore collects the names from
-% the music of each score, measures them, and widens indent or short-indent where needed.
-% It never narrows them, so files without names (or with short ones) keep their layout.
+% (first system) and short-indent (later systems) leave free, with the brackets and braces of
+% staff groups between the names and the staves. A name wider than that space runs into the
+% margin and off the page. The book handler therefore collects the names from the music of
+% each score, measures them, and widens indent or short-indent of that score's layout where
+% needed. It never narrows them, and scores without names are not touched.
 
-% Room left of a name for the brace or bracket of a staff group and the name's padding, in mm.
-#(define lily-on-eink:name-allowance-mm 3)
+% Room between a name and the staves, in mm, without staff groups ...
+#(define lily-on-eink:name-padding-mm 1.5)
+% ... and per nesting level of staff groups (one bracket or brace each), in staff spaces.
+#(define lily-on-eink:group-allowance 2)
+
+% Context types that draw a bracket or brace at the system start. Any type whose name
+% contains "Group" counts as well.
+#(define lily-on-eink:group-types
+   '(StaffGroup ChoirStaff PianoStaff GrandStaff InnerStaffGroup InnerChoirStaff))
+
+#(define (lily-on-eink:group? m)
+   (and (eq? 'ContextSpeccedMusic (ly:music-property m 'name))
+        (let ((type (ly:music-property m 'context-type)))
+          (and (symbol? type)
+               (or (memq type lily-on-eink:group-types)
+                   (string-contains (symbol->string type) "Group"))))))
+
+#(define (lily-on-eink:children m)
+   (append (filter ly:music? (ly:music-property m 'elements))
+           (let ((e (ly:music-property m 'element))) (if (ly:music? e) (list e) '()))))
 
 % The values of @var{property} (instrumentName or shortInstrumentName) found in @var{music}:
 % in \set commands and in the \with blocks of \new and \context.
@@ -395,60 +457,80 @@ are reflowed into rows first."
                          (caddr op)))
                   (let ((ops (ly:music-property m 'property-operations)))
                     (if (list? ops) ops '())))
-      (append-map walk (filter ly:music? (ly:music-property m 'elements)))
-      (let ((e (ly:music-property m 'element)))
-        (if (ly:music? e) (walk e) '())))))
+      (append-map walk (lily-on-eink:children m)))))
 
-% Width in mm of the widest @var{property} value in @var{scores}, measured with the text
+% The deepest nesting of staff groups in @var{music}.
+#(define (lily-on-eink:group-depth music)
+   (let walk ((m music))
+     (+ (if (lily-on-eink:group? m) 1 0)
+        (fold max 0 (map walk (lily-on-eink:children m))))))
+
+% Width in mm of the widest @var{property} value in @var{music}, measured with the text
 % settings of @var{paper}. Markup stencils are in staff spaces; output-scale is the staff
 % space in mm.
-#(define (lily-on-eink:widest-name-mm paper scores property)
+#(define (lily-on-eink:widest-name-mm paper music property)
    (let ((props (layout-extract-page-properties paper))
          (scale (ly:output-def-lookup paper 'output-scale 1)))
      (fold max 0
            (map (lambda (value)
                   (* scale (lily-on-eink:width (interpret-markup paper props value))))
-                (filter markup?
-                        (append-map (lambda (score)
-                                      (lily-on-eink:name-values (ly:score-music score) property))
-                                    scores))))))
+                (filter markup? (lily-on-eink:name-values music property))))))
 
-% Raises @var{variable} of output definition @var{def} to at least @var{needed-mm}. With
-% @var{local-only}, only when @var{def} sets the variable itself.
-#(define (lily-on-eink:raise-to! def variable needed-mm local-only)
-   (if (or (not local-only) (module-local-variable (ly:output-def-scope def) variable))
-       (let ((needed (* needed-mm (ly:output-def-lookup def 'mm 1))))
-         (if (< (ly:output-def-lookup def variable 0) needed)
-             (ly:output-def-set-variable! def variable needed)))))
+% The \layout definitions of @var{score}. A score without any output definition is laid out
+% with the default \layout, so it gets a copy of that to change. A score with only \midi has
+% none and is not laid out.
+#(define (lily-on-eink:score-layouts! score)
+   (let ((defs (ly:score-output-defs score)))
+     (if (null? defs)
+         (let ((def (ly:output-def-clone (ly:parser-lookup '$defaultlayout))))
+           (ly:score-add-output-def! score def)
+           (list def))
+         (filter (lambda (def) (eq? 'layout (ly:output-def-lookup def 'output-def-kind)))
+                 defs))))
 
-% Widens indent and short-indent so that the instrument names of the scores of @var{book}
-% fit: in @var{paper}, and in a score's own \layout where that sets them.
-#(define (lily-on-eink:fit-names! paper book)
-   (let ((scores (filter ly:score? (ly:book-scores book))))
-     (for-each
-      (lambda (property variable)
-        (let ((width (lily-on-eink:widest-name-mm paper scores property)))
-          (if (> width 0)
-              (let ((needed (+ width lily-on-eink:name-allowance-mm)))
-                (lily-on-eink:raise-to! paper variable needed #f)
-                (for-each (lambda (score)
-                            (for-each (lambda (def) (lily-on-eink:raise-to! def variable needed #t))
-                                      (ly:score-output-defs score)))
-                          scores)))))
-      '(instrumentName shortInstrumentName)
-      '(indent short-indent))))
+% Widens indent and short-indent of @var{score}'s layout so that its instrument names fit.
+% A layout that does not set them falls back to @var{paper}'s values.
+#(define (lily-on-eink:fit-names! paper score)
+   (let* ((music (ly:score-music score))
+          (widths (map (lambda (property) (lily-on-eink:widest-name-mm paper music property))
+                       '(instrumentName shortInstrumentName))))
+     (if (any positive? widths)
+         (let ((room (+ lily-on-eink:name-padding-mm
+                        (* lily-on-eink:group-allowance
+                           (lily-on-eink:group-depth music)
+                           (ly:output-def-lookup paper 'output-scale 1)))))
+           (for-each
+            (lambda (def)
+              (for-each
+               (lambda (variable width)
+                 (if (positive? width)
+                     (let ((needed (* (+ width room) (ly:output-def-lookup def 'mm 1))))
+                       (if (< (ly:output-def-lookup def variable
+                                                    (ly:output-def-lookup paper variable 0))
+                              needed)
+                           (ly:output-def-set-variable! def variable needed)))))
+               '(indent short-indent)
+               widths))
+            (lily-on-eink:score-layouts! score))))))
 
-% Applies the device settings to the paper of @var{book} and of all its book parts.
+% Applies the device settings to the paper of @var{book} and of all its book parts, and fits
+% the instrument names of their scores.
 #(define (lily-on-eink:apply-device-to-book! book)
    (let ((paper (ly:book-paper book)))
      (if (ly:output-def? paper)
          (begin
            (lily-on-eink:apply-device! paper)
-           (lily-on-eink:fit-names! paper book))))
+           (for-each (lambda (score) (lily-on-eink:fit-names! paper score))
+                     (filter ly:score? (ly:book-scores book))))))
    (for-each lily-on-eink:apply-device-to-book! (ly:book-book-parts book)))
 
 #(define lily-on-eink:toplevel-book-handler toplevel-book-handler)
 #(define (toplevel-book-handler book)
    (if lily-on-eink:device (lily-on-eink:apply-device-to-book! book))
    (lily-on-eink:toplevel-book-handler book))
+
+% Output file names: the engine always writes score.pdf, score-1.pdf, ...; a book's own
+% output name or suffix would make its PDF unfindable, so these commands do nothing here.
+bookOutputName = #(define-void-function (name) (string?) *unspecified*)
+bookOutputSuffix = #(define-void-function (suffix) (string?) *unspecified*)
 `;

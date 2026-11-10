@@ -66,6 +66,11 @@ describe('buildWrapper', () => {
 }`,
     );
   });
+  it('leaves out the configure! call with omitConfigure (test only)', () => {
+    const s = buildWrapper({ ...base, omitConfigure: true }).source;
+    expect(s).not.toContain('configure!');
+    expect(s).toContain(String.raw`\include "song.ly"`);
+  });
 });
 
 describe('overlay', () => {

@@ -222,14 +222,12 @@ describe('corpus on kobo-sage', () => {
       keepTagline: true,
       lilypondVersion: await engine.lilypondVersion(),
       extraPaper: 'indent = 0',
+      // Without configure! the overlay's book handler does not widen the indent again.
+      omitConfigure: true,
     });
     files[`${dir}/${wrapper.overlay.name}`] = wrapper.overlay.content;
-    // Without the configure! call the overlay's book handler stays idle, so it does not widen
-    // the indent for the instrument name again; the wrapper's \paper still sets the page.
-    const source = wrapper.source.replace(/^#\(lily-on-eink:configure! [^]*?\)\)\)\n/m, '');
-    expect(source).not.toBe(wrapper.source);
     const result = await engine.compile({
-      source,
+      source: wrapper.source,
       filename: `${dir}/lily-on-eink-wrapper.ly`,
       files,
       formats: ['png'],
@@ -597,6 +595,10 @@ describe('device paper inside \\book and \\bookpart on kobo-sage', () => {
 });
 
 describe('instrument names on kobo-sage', () => {
+  const device = getDevice('kobo-sage');
+  const pxPerMm = device.ppi / 25.4;
+  /** The profile's left margin; names may use it down to 0.5 mm less, never the page edge. */
+  const minLeftPx = (effectiveMarginsMm(getProfile('generic'), device).left - 0.5) * pxPerMm;
   const RIGHT = String.raw`\relative c'' { \repeat unfold 16 { c4 d e f } }`;
   const LEFT = String.raw`\relative c { \clef bass \repeat unfold 16 { c4 g c g } }`;
   const NAMES = [
@@ -615,9 +617,58 @@ describe('instrument names on kobo-sage', () => {
   \layout { indent = 0 short-indent = 0 }
 }`,
     },
+    {
+      name: 'toplevel-layout-indent-0',
+      source: String.raw`\layout { indent = 0 short-indent = 0 }
+\new Staff \with { instrumentName = "Violoncello primo" shortInstrumentName = "Vc. I" } ${RIGHT}`,
+    },
+    {
+      name: 'deep-nesting',
+      source: String.raw`\layout { indent = 0 short-indent = 0 }
+\new StaffGroup << \new StaffGroup <<
+  \new ChoirStaff <<
+    \new Staff \with { instrumentName = "Sopran I" shortInstrumentName = "Sopran I" } ${RIGHT}
+    \new Staff \with { instrumentName = "Alt" shortInstrumentName = "Alt" } ${RIGHT}
+  >>
+  \new GrandStaff \with { instrumentName = "Klavier" shortInstrumentName = "Klavier" } << \new Staff ${RIGHT} \new Staff ${LEFT} >>
+>> >>`,
+    },
   ];
 
-  it.each(NAMES)('$name keeps the instrument names out of the edge band', async ({ name, source }) => {
+  /** Staff lines (rows dark over more than half the width), merged, with their first dark column. */
+  function staffLines(png: Uint8Array): { row: number; start: number }[] {
+    const { width, height, data } = PNG.sync.read(Buffer.from(png));
+    const lines: { row: number; start: number }[] = [];
+    for (let y = 0; y < height; y++) {
+      let dark = 0;
+      let start = -1;
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4]! < 128) {
+          dark++;
+          if (start < 0) start = x;
+        }
+      }
+      if (dark <= width / 2) continue;
+      if (lines.at(-1)?.row === y - 1) lines.at(-1)!.row = y;
+      else lines.push({ row: y, start });
+    }
+    return lines;
+  }
+
+  /** Leftmost dark column (any channel < 128) in rows [from, to]. */
+  function leftmostInk(png: Uint8Array, from: number, to: number): number {
+    const { width, data } = PNG.sync.read(Buffer.from(png));
+    let left = width;
+    for (let y = from; y <= to; y++) {
+      for (let x = 0; x < left; x++) {
+        const i = (y * width + x) * 4;
+        if (data[i]! < 128 || data[i + 1]! < 128 || data[i + 2]! < 128) left = x;
+      }
+    }
+    return left;
+  }
+
+  async function render(name: string, source: string): Promise<Uint8Array[]> {
     const result = await convert(
       [{ path: `${name}.ly`, content: source }],
       { device: 'kobo-sage', outputs: ['png'], keepTagline: false },
@@ -627,6 +678,52 @@ describe('instrument names on kobo-sage', () => {
     const pages = result.outputs[0]!.pngPages!;
     expect(pages.length).toBeGreaterThan(0);
     savePages(`names-${name}`, pages);
-    for (const page of pages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    return pages;
+  }
+
+  it.each(NAMES)('$name keeps the instrument names inside the left margin', async ({ name, source }) => {
+    for (const page of await render(name, source)) {
+      expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+      // Every system, from the first to the last staff line on the page: names, braces and
+      // brackets stay right of the profile margin.
+      const lines = staffLines(page);
+      expect(leftmostInk(page, lines[0]!.row, lines.at(-1)!.row)).toBeGreaterThanOrEqual(minLeftPx);
+    }
+  });
+
+  it('widens the indent only for the score that has names', async () => {
+    const [page] = await render(
+      'mixed-scores',
+      String.raw`\score { \new Staff \with { instrumentName = "Violoncello primo" } ${RIGHT} }
+\score { \new Staff ${RIGHT} \layout { indent = 0 } }`,
+    );
+    const lines = staffLines(page!);
+    expect(leftmostInk(page!, lines[0]!.row, lines.at(-1)!.row)).toBeGreaterThanOrEqual(minLeftPx);
+    // The second score starts after the first score's systems. Its first system keeps
+    // indent = 0: its staff lines start at the line start, like the unindented systems.
+    const starts = lines.map((l) => l.start);
+    const lineStart = Math.min(...starts);
+    const firstStart = starts[0]!;
+    expect(firstStart).toBeGreaterThan(lineStart + 100);
+    // Exactly one staff (five lines) is indented: the first system of the first score.
+    expect(starts.filter((s) => s > lineStart + 10)).toHaveLength(5);
+  });
+});
+
+describe('book output names on kobo-sage', () => {
+  it('ignores \\bookOutputName and \\bookOutputSuffix, so every book is an output', async () => {
+    const music = String.raw`\relative c'' { \repeat unfold 12 { c4 d e f } }`;
+    const source = String.raw`\book { \bookOutputSuffix "eins" \score { ${music} } }
+\book { \score { ${music} } }
+\book { \bookOutputName "drittes" \score { ${music} } }
+`;
+    const result = await convert(
+      [{ path: 'books.ly', content: source }],
+      { device: 'kobo-sage', outputs: ['pdf'], keepTagline: false },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    expect(result.outputs).toHaveLength(3);
+    for (const output of result.outputs) expect(output.pdf).toBeDefined();
   });
 });
