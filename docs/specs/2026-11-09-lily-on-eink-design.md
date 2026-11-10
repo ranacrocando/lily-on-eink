@@ -126,6 +126,11 @@ npm cannot install a workspace sub-package straight from a git tag. Core is ther
 - **Until then** (private repos) the app uses the pinned checkout described above.
 - **Bumping core in the app is manual:** update the tarball URLs (or `core-ref.txt`) in a PR. Dependabot does not update URL or `file:` dependencies.
 - Publishing to the public npm registry stays optional. It is decided in M3, only if third parties want to use the library.
+- **Why release tarballs and not GitHub Packages** (owner decision, 2026-11-10):
+  - GitHub Packages' npm registry requires a token to install, even for public packages. Every consumer and every CI would need an `.npmrc` with a GitHub token. That is a barrier for exactly the people the MIT core is for.
+  - Its package names must start with the owner (`@ranacrocando/…`), so the packages would have to be renamed, or the repos moved to a `lily-on-eink` organization.
+  - Its advantages (normal semver, Dependabot bumps, and app CI reading core with `GITHUB_TOKEN`, granted per package, instead of `CORE_REPO_TOKEN`) do not outweigh this: the only consumer today is the app, and `CORE_REPO_TOKEN` goes away anyway when the repos go public.
+  - If the library gets outside users, the next step would be the public npm registry (decided in M3), not GitHub Packages.
 
 **Engine version consistency.**
 - The app **never depends on `@sightread/lilypond-wasm` directly**. It gets the engine only transitively through `@lily-on-eink/engine-wasm`, so exactly one engine version exists in both repos.
@@ -263,6 +268,8 @@ The PDF page always has **exactly the device's full physical screen size**, so t
 **Margins** come from two sources, added together:
 - **Profile base margin:** 3 mm on all sides by default, set per profile.
 - **Device safe area:** the space covered by reader UI that is **drawn over** the page and can't be hidden, e.g. Kindle's progress footer. It is added to the matching margin and never shrinks the page. Values are in mm.
+
+**Verified on hardware:** on the Kobo Sage (software 4.38) the calibration page shows all four edges, so its safe area stays 0 on every side (checked by the owner, 2026-11-10). The other presets stay unverified until someone checks them on the device.
 
 **Staff size:**
 - The staff size belongs to the **genre profile** and means the same physical size on every device.
