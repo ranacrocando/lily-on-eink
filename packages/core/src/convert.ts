@@ -3,7 +3,7 @@ import { normalizeLog, parseDiagnostics, type Diagnostic } from './diagnostics.j
 import type { Engine, EngineFormat, EngineRequest, EngineResult } from './engine.js';
 import { groupOutputs, outputFileName } from './outputs.js';
 import { effectiveMarginsMm, effectiveStaffSize, getProfile } from './profiles.js';
-import { analyzeProject, findIncludes, resolveInclude } from './project.js';
+import { analyzeProject, findIncludes, resolveInclude, versionWarnings } from './project.js';
 import { buildWrapper } from './wrapper.js';
 
 /** A project file. `path` is relative and POSIX-style, e.g. `songs/a.ly`. */
@@ -185,6 +185,10 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
     if (!(main in texts)) diagnostics.push(error(main, 'main file is not part of the project'));
     else if (![...reachable(main, texts)].some((p) => brokenFiles.has(p))) mainFiles.push(main);
   }
+
+  const converted = new Set(mainFiles.flatMap((m) => [...reachable(m, texts)]));
+  const convertedVersions = Object.fromEntries(Object.entries(analysis.versions).filter(([p]) => converted.has(p)));
+  diagnostics.push(...versionWarnings(convertedVersions));
 
   const wrapperOptions = {
     pageMm: pageSizeMm(device),
