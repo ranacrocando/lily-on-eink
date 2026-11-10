@@ -24,6 +24,12 @@ const expected = String.raw`\version "2.26.0"
   right-margin = 3\mm
   ragged-last-bottom = ##t
   print-page-number = ##f
+  bookTitleMarkup = \lilyOnEinkBookTitleMarkup
+  scoreTitleMarkup = \lilyOnEinkScoreTitleMarkup
+  oddHeaderMarkup = \lilyOnEinkPageHeaderMarkup
+  evenHeaderMarkup = \lilyOnEinkPageHeaderMarkup
+  oddFooterMarkup = \lilyOnEinkFooterMarkup
+  evenFooterMarkup = \lilyOnEinkFooterMarkup
 }
 #(set-global-staff-size 17)
 `;
@@ -52,7 +58,7 @@ describe('buildWrapper', () => {
   });
   it('appends extraPaper (test only) as the last line of the \\paper block', () => {
     expect(buildWrapper({ ...base, extraPaper: 'indent = 0' }).source).toContain(
-      String.raw`  print-page-number = ##f
+      String.raw`  evenFooterMarkup = \lilyOnEinkFooterMarkup
   indent = 0
 }`,
     );

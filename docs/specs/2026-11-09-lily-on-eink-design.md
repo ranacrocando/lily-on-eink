@@ -183,7 +183,7 @@ The overlay acts at three points.
 3. Removes `system-count`, `page-count`, `systems-per-page`, `min-systems-per-page` and `max-systems-per-page`. Resets `page-breaking` to the profile's breaker (default `ly:optimal-breaking`).
 4. Re-applies the staff size with `layout-set-absolute-staff-size-in-module`. This is needed because a user's `#(set-global-staff-size …)` replaces `$defaultpaper` with a clone, which throws away the pre-include setup.
 5. Applies the profile's thickness and font settings (§4.4).
-6. Sets `print-page-number = ##f`, `ragged-last-bottom = ##t`, and the title and tagline handling below.
+6. Sets `print-page-number = ##f`, `ragged-last-bottom = ##t`, and the title, page header and footer handling below. (In the current slice this lives in the wrapper's final `\paper` block, which follows the user's `\include`; see "Titles".)
 7. Sets the indent (see "Indent" below).
 
 The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, because nested `\bookpart`s inside a `\book` never reach `toplevel-bookpart-handler`.
@@ -205,15 +205,22 @@ The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, be
 - This needs no TypeScript heuristic.
 
 **Titles.**
-- `bookTitleMarkup` and `scoreTitleMarkup` are replaced by an overlay version built on a **custom markup command**:
-  - String fields are split greedily into **centred** lines that fit `line-width`.
-  - Markup fields that are too wide are scaled down to `line-width`.
-- It applies to every header field the overlay's title markups render: `dedication`, `title`, `subtitle`, `subsubtitle`, `instrument`, `poet`, `composer`, `meter`, `arranger`, `piece` and `opus`.
-- `scoreTitleMarkup` gets the same treatment, because it embeds `bookTitleMarkup` when `print-all-headers` is on.
+- The overlay defines **custom markup commands** (MIT, written from scratch):
+  - `\lily-on-eink-field`: string fields are split greedily at ASCII spaces into **centred** lines that fit `line-width`; markup fields that are too wide are scaled down to `line-width`.
+  - `\lily-on-eink-field-pair`: two fields flush left and flush right on one line (poet/composer, meter/arranger, piece/opus), stacked when they do not fit side by side.
+  - `\lily-on-eink-score-title`: the piece/opus pair; with `print-all-headers`, the full title block above it.
+  - `\lily-on-eink-page-header`: the instrument on every page of a book part but its first. No page numbers.
+  - `\lily-on-eink-footer`: copyright on the first page of each book part, tagline on the last page of the book.
+- It applies to every header field the title markups render: `dedication`, `title`, `subtitle`, `subsubtitle`, `instrument`, `poet`, `composer`, `meter`, `arranger`, `piece` and `opus`, plus `copyright` and `tagline`.
+- The title is `\huge \bold`, two font-size steps below LilyPond's A4 default, so that typical titles fit one line on a 6–8" page.
+- **Installation:** the wrapper's final `\paper` block, after the user's `\include`, sets `bookTitleMarkup`, `scoreTitleMarkup`, `oddHeaderMarkup`, `evenHeaderMarkup`, `oddFooterMarkup` and `evenFooterMarkup` to the overlay's markups. Being the last write to the default paper, it wins over LilyPond's defaults and the user's top-level `\paper`.
+- **Known limits:**
+  - The user's own page headers and footers are replaced, and so is a `bookTitleMarkup` (including `bookTitleMarkup = ##f` used to hide titles).
+  - A `\paper` block inside `\book` or `\bookpart` is not covered yet; its title markups stay as the user wrote them.
 - `\wordwrap-field` is not used: it returns an empty stencil for markup values and is left-aligned.
 
 **Tagline.**
-- Kept by default, because taglines often carry license or attribution text. It is rendered at reduced size and wrapped with the same custom markup command.
+- Kept by default, because taglines often carry license or attribution text. It is rendered one size smaller and wrapped with the same custom markup command, by `\lily-on-eink-footer`.
 - `keepTagline: false` drops it.
 
 ### 4.2 Physical sizing and margins

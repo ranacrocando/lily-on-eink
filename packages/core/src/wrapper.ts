@@ -20,7 +20,8 @@ export interface Wrapper {
 // Known slice limits (to be fixed in the hardening plan):
 // - \book blocks with their own \paper are not overridden;
 // - a file-level line-width is not overridden;
-// - long titles are not handled.
+// - custom page headers and footers (odd/even Header/FooterMarkup) and a user's
+//   bookTitleMarkup (also `= ##f`) are replaced by the overlay's markups.
 // Deliberately no set-paper-size (it would rescale margins and indent from A4)
 // and no indent override.
 
@@ -55,6 +56,17 @@ export function buildWrapper(opts: WrapperOptions): Wrapper {
     String.raw`  right-margin = ${num(m.right)}\mm`,
     String.raw`  ragged-last-bottom = ##t`,
     String.raw`  print-page-number = ##f`,
+    // Title, header and footer markups from the overlay. They are set here, in the \paper block
+    // that follows the user's include, because this block is the last write to the default
+    // paper: it beats both LilyPond's defaults and title, header or footer markups from the
+    // user's own top-level \paper. The overlay is read before the user's file, so it can only
+    // define them.
+    String.raw`  bookTitleMarkup = \lilyOnEinkBookTitleMarkup`,
+    String.raw`  scoreTitleMarkup = \lilyOnEinkScoreTitleMarkup`,
+    String.raw`  oddHeaderMarkup = \lilyOnEinkPageHeaderMarkup`,
+    String.raw`  evenHeaderMarkup = \lilyOnEinkPageHeaderMarkup`,
+    String.raw`  oddFooterMarkup = \lilyOnEinkFooterMarkup`,
+    String.raw`  evenFooterMarkup = \lilyOnEinkFooterMarkup`,
     ...(opts.extraPaper !== undefined ? [`  ${opts.extraPaper}`] : []),
     String.raw`}`,
     String.raw`#(set-global-staff-size ${num(opts.staffSize)})`,

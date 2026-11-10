@@ -11,6 +11,7 @@ import {
   getDevice,
   getProfile,
   pageSizeMm,
+  SYSTEM_START_ALLOWANCE_MM,
   type ConvertResult,
   type Engine,
   type ProjectFile,
@@ -185,13 +186,12 @@ describe('corpus on kobo-sage', () => {
     for (const page of pngPages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
   };
 
-  it('bass-etude draws nothing within 1.5 mm of the page edge', () => expectBandWhite(CASES[1]));
+  it.each([CASES[0], CASES[1]])('$name draws nothing within 1.5 mm of the page edge', expectBandWhite);
 
-  // KNOWN FAILURES, deferred to the hardening plan (title markup / markup scaling):
-  // - reger: the long title is not wrapped and overflows both edges (page 1 only);
-  // - leise-rieselt: the two-column verse markup is wider than the line, right edge.
-  // `it.fails` turns red as soon as a case passes, so this flips back to `it` when fixed.
-  it.fails.each([CASES[0], CASES[2]])('$name draws nothing within 1.5 mm of the page edge', expectBandWhite);
+  // KNOWN FAILURE, deferred to the hardening plan (markup scaling outside the titles):
+  // leise-rieselt's two-column verse markup is wider than the line, right edge.
+  // `it.fails` turns red as soon as the case passes, so this flips back to `it` when fixed.
+  it.fails('leise-rieselt draws nothing within 1.5 mm of the page edge', () => expectBandWhite(CASES[2]));
 
   it('applies the staff size: 17 pt gives a staff space of about 17.7 px at 300 dpi', async () => {
     const files: ProjectFile[] = [
@@ -255,5 +255,193 @@ describe('corpus on other devices', () => {
     const [w, h] = pdfMediaBoxMm(result.outputs[0]!.pdf!);
     expect(Math.abs(w - expected.width)).toBeLessThanOrEqual(0.5);
     expect(Math.abs(h - expected.height)).toBeLessThanOrEqual(0.5);
+  });
+});
+
+/**
+ * The title area of a page: every row above the first staff line (with `fromBottom`, the
+ * footer area: every row below the last staff line, listed bottom up). A staff line is a row
+ * with a continuous dark run (any channel < 128) longer than a third of the width; text never
+ * has one, although a bold, full-width title line can be dark over more than half of a row.
+ */
+function titleRows(png: Uint8Array, fromBottom = false): { width: number; rows: boolean[][] } {
+  const { width, height, data } = PNG.sync.read(Buffer.from(png));
+  const rows: boolean[][] = [];
+  for (let n = 0; n < height; n++) {
+    const y = fromBottom ? height - 1 - n : n;
+    const row: boolean[] = [];
+    let run = 0;
+    let longest = 0;
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const dark = data[i]! < 128 || data[i + 1]! < 128 || data[i + 2]! < 128;
+      row.push(dark);
+      run = dark ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    if (longest > width / 3) break;
+    rows.push(row);
+  }
+  return { width, rows };
+}
+
+/**
+ * Bounding box of the ink in the title area (rows and columns, inclusive). With `fromBottom`,
+ * the footer area; rows then count from the bottom edge, so only the height is meaningful.
+ */
+function titleInk(
+  png: Uint8Array,
+  fromBottom = false,
+): { top: number; bottom: number; left: number; right: number; width: number } {
+  const { width, rows } = titleRows(png, fromBottom);
+  const box = { top: -1, bottom: -1, left: width, right: -1, width };
+  rows.forEach((row, y) => {
+    const first = row.indexOf(true);
+    if (first < 0) return;
+    if (box.top < 0) box.top = y;
+    box.bottom = y;
+    box.left = Math.min(box.left, first);
+    box.right = Math.max(box.right, row.lastIndexOf(true));
+  });
+  if (box.top < 0) throw new Error('no ink outside the staves');
+  return box;
+}
+
+/** True if the title area has ink in the column range [from, to). */
+function titleInkInColumns(png: Uint8Array, from: number, to: number): boolean {
+  return titleRows(png).rows.some((row) => row.slice(from, to).includes(true));
+}
+
+describe('titles on kobo-sage', () => {
+  const device = getDevice('kobo-sage');
+  const pxPerMm = device.ppi / 25.4;
+  const margins = effectiveMarginsMm(getProfile('generic'), device);
+  /** Left and right end of the line, in px from the left and right page edge. */
+  const lineLeftPx = (margins.left + SYSTEM_START_ALLOWANCE_MM) * pxPerMm;
+  const lineRightPx = margins.right * pxPerMm;
+  const MUSIC = String.raw`\new Staff \with { \omit Clef \omit TimeSignature } { \repeat unfold 16 { c''1 } }`;
+
+  /**
+   * Page 1 of a synthetic score, through convert() (and so buildWrapper) on kobo-sage with the
+   * generic profile and, unless asked for, no tagline. Clef and time signature are omitted and
+   * the 16 bars fill the first system, so the only ink above its first staff line is the
+   * titles (and below the last staff line, the footer). `score` replaces the default music.
+   */
+  async function renderTitles(
+    name: string,
+    header: string,
+    opts: { paper?: string; score?: string; keepTagline?: boolean } = {},
+  ): Promise<Uint8Array> {
+    const source = String.raw`\header { ${header} }
+${opts.paper ?? ''}
+${opts.score ?? MUSIC}
+`;
+    const result = await convert(
+      [{ path: 'titles.ly', content: source }],
+      { device: 'kobo-sage', outputs: ['png'], keepTagline: opts.keepTagline ?? false },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const page = result.outputs[0]?.pngPages?.[0];
+    expect(page).toBeDefined();
+    savePages(`title-${name}`, [page!]);
+    return page!;
+  }
+
+  // Line count heuristic: the title area's ink height, compared with the ink height of a
+  // one-line title made of the same words. "Long title" has ascenders (L, t, l) and a
+  // descender (g), so no single line of these words can be taller than it; a ratio above
+  // 1.8 therefore means at least two lines. This avoids counting blank-row gaps between
+  // lines, which descenders and ascenders of adjacent lines can close.
+  const WORDS = 'Long title';
+  let singleLineHeight: Promise<number> | undefined;
+  const oneLineHeight = () =>
+    (singleLineHeight ??= renderTitles('one-line', `title = "${WORDS}"`).then((page) => {
+      const box = titleInk(page);
+      return box.bottom - box.top + 1;
+    }));
+
+  it('wraps a long string title onto several lines inside the page', async () => {
+    const page = await renderTitles('long-string', `title = "${Array(8).fill(WORDS).join(' ')}"`);
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    const box = titleInk(page);
+    expect(box.bottom - box.top + 1).toBeGreaterThan(1.8 * (await oneLineHeight()));
+  });
+
+  it('scales a markup title that is too wide down to the line width, on one line', async () => {
+    const page = await renderTitles(
+      'long-markup',
+      String.raw`title = \markup { \bold "Very long markup title that is far too wide for the narrow page of an e-reader" }`,
+    );
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    const box = titleInk(page);
+    // Scaled, not wrapped: one line high at most, and it fills the line from end to end.
+    expect(box.bottom - box.top + 1).toBeLessThanOrEqual(await oneLineHeight());
+    expect(box.left).toBeGreaterThanOrEqual(lineLeftPx - 3);
+    expect(box.width - 1 - box.right).toBeGreaterThanOrEqual(lineRightPx - 3);
+    expect(box.right - box.left + 1).toBeGreaterThan(0.95 * (box.width - lineLeftPx - lineRightPx));
+  });
+
+  it('keeps a short title on one line, centred on the line', async () => {
+    const page = await renderTitles('short', `title = "${WORDS}"`);
+    const box = titleInk(page);
+    expect(box.bottom - box.top + 1).toBeLessThanOrEqual(await oneLineHeight());
+    // The line is not centred on the page (the left margin is wider), so compare the ink
+    // margins with the line ends, not with the page edges.
+    const left = box.left - lineLeftPx;
+    const right = box.width - 1 - box.right - lineRightPx;
+    expect(Math.abs(left - right)).toBeLessThanOrEqual(4);
+  });
+
+  it('renders poet flush left and composer flush right', async () => {
+    const page = await renderTitles('poet-composer', `title = "${WORDS}" poet = "Poet Name" composer = "Composer Name"`);
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    const { width } = PNG.sync.read(Buffer.from(page));
+    // The centred title stays in the middle; the outer quarters hold only poet and composer.
+    expect(titleInkInColumns(page, 0, Math.round(width / 4))).toBe(true);
+    expect(titleInkInColumns(page, Math.round((3 * width) / 4), width)).toBe(true);
+  });
+
+  it("overrides a bookTitleMarkup from the user's own \\paper block", async () => {
+    // The user's markup would print the title on one line, overflowing both edges.
+    const page = await renderTitles(
+      'user-paper',
+      `title = "${Array(8).fill(WORDS).join(' ')}"`,
+      { paper: String.raw`\paper { bookTitleMarkup = \markup \fill-line { \huge \fromproperty #'header:title } }` },
+    );
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    const box = titleInk(page);
+    expect(box.bottom - box.top + 1).toBeGreaterThan(1.8 * (await oneLineHeight()));
+  });
+
+  it('stacks a long poet and a long composer when they do not fit side by side', async () => {
+    // Reference: one poet line of the same words, at the poet's (normal) size.
+    const reference = titleInk(await renderTitles('poet-one-line', `poet = "${WORDS}"`));
+    const long = Array(4).fill(WORDS).join(' ');
+    const page = await renderTitles('poet-composer-long', `poet = "${long}" composer = "${long}"`);
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    const box = titleInk(page);
+    expect(box.bottom - box.top + 1).toBeGreaterThan(1.8 * (reference.bottom - reference.top + 1));
+  });
+
+  it('fits the full title that print-all-headers repeats above a score', async () => {
+    const long = Array(8).fill(WORDS).join(' ');
+    const page = await renderTitles('print-all-headers', '', {
+      paper: String.raw`\paper { print-all-headers = ##t }`,
+      score: String.raw`\score { ${MUSIC} \header { title = "${long}" piece = "Piece" opus = "Op. 1" } }`,
+    });
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    const box = titleInk(page);
+    expect(box.bottom - box.top + 1).toBeGreaterThan(1.8 * (await oneLineHeight()));
+  });
+
+  it('wraps a long tagline string inside the page', async () => {
+    const tagline = Array(10).fill(WORDS).join(' ');
+    const page = await renderTitles('tagline', `tagline = "${tagline}"`, { keepTagline: true });
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    // Unwrapped, this tagline would be about twice the line width.
+    const box = titleInk(page, true);
+    expect(box.left).toBeGreaterThanOrEqual(lineLeftPx - 3);
+    expect(box.width - 1 - box.right).toBeGreaterThanOrEqual(lineRightPx - 3);
   });
 });
