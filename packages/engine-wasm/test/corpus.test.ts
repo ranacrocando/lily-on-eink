@@ -135,6 +135,9 @@ const CASES = [
   { name: 'reger', dir: 'organ/reger-lobe-den-herren', profile: 'organ' },
   { name: 'bass-etude', dir: 'bass/bass-etude-e-minor', profile: 'tab' },
   { name: 'leise-rieselt', dir: 'leadsheet/leise-rieselt-der-schnee', profile: 'leadsheet' },
+  { name: 'piano-ode', dir: 'piano/ode-to-joy-arrangement', profile: 'piano' },
+  { name: 'ukulele-susanna', dir: 'ukulele/oh-susanna', profile: 'tab' },
+  { name: 'accordion-entchen', dir: 'accordion/alle-meine-entchen', profile: 'accordion' },
 ] as const;
 
 let engine: Engine;
@@ -190,6 +193,24 @@ describe('corpus on kobo-sage', () => {
 
   // leise-rieselt's two-column verse markup is wider than the line; the overlay scales it down.
   it.each(CASES)('$name draws nothing within 1.5 mm of the page edge', expectBandWhite);
+
+  // Short instrument names on later systems used to be clipped at the left page edge.
+  it('draws nothing within 1.5 mm of the left edge with a short instrument name', async () => {
+    const source = String.raw`\header { tagline = ##f }
+\new PianoStaff \with { instrumentName = "Piano" shortInstrumentName = "Pno." } <<
+  \new Staff { \repeat unfold 24 { c''1 } }
+  \new Staff { \clef bass \repeat unfold 24 { c1 } }
+>>`;
+    const result = await convert(
+      [{ path: 'names.ly', content: source }],
+      { device: 'kobo-sage', outputs: ['png'] },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const pages = result.outputs[0]?.pngPages ?? [];
+    expect(pages.length).toBeGreaterThan(0);
+    for (const page of pages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+  });
 
   it('applies the staff size: 17 pt gives a staff space of about 17.7 px at 300 dpi', async () => {
     const files: ProjectFile[] = [
