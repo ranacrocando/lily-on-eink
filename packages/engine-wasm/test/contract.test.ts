@@ -188,4 +188,21 @@ describe('engine-wasm contract', () => {
     await expect(own.compile(req(String.raw`{ c'1 }`))).rejects.toThrow('engine disposed');
     await expect(own.lilypondVersion()).rejects.toThrow('engine disposed');
   });
+
+  it('preloads the engine and still compiles afterwards', async () => {
+    const own = createWasmEngine();
+    try {
+      await own.preload?.();
+      const result = await own.compile(req(String.raw`{ c'1 }`));
+      expect(result.ok).toBe(true);
+    } finally {
+      own.dispose();
+    }
+  });
+
+  it('rejects preload after dispose', async () => {
+    const own = createWasmEngine();
+    own.dispose();
+    await expect(own.preload?.()).rejects.toThrow('engine disposed');
+  });
 });

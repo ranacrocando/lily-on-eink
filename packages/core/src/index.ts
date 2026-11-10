@@ -1,4 +1,11 @@
-export type { Engine, EngineFormat, EngineRequest, EngineResult } from './engine.js';
+export type {
+  Engine,
+  EngineFormat,
+  EngineLoadProgress,
+  EnginePreloadOptions,
+  EngineRequest,
+  EngineResult,
+} from './engine.js';
 export * from './devices.js';
 export * from './profiles.js';
 export * from './wrapper.js';
