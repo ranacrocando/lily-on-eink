@@ -201,6 +201,25 @@ describe('corpus on kobo-sage', () => {
   // `it.fails` turns red as soon as the case passes, so this flips back to `it` when fixed.
   it.fails('leise-rieselt draws nothing within 1.5 mm of the page edge', () => expectBandWhite(CASES[2]));
 
+  // KNOWN FAILURE (overlay bug): short instrument names on later systems are clipped at the
+  // left page edge because the overlay sets no indent/short-indent. Flips to `it` when fixed.
+  it.fails('draws nothing within 1.5 mm of the left edge with a short instrument name', async () => {
+    const source = String.raw`\header { tagline = ##f }
+\new PianoStaff \with { instrumentName = "Piano" shortInstrumentName = "Pno." } <<
+  \new Staff { \repeat unfold 24 { c''1 } }
+  \new Staff { \clef bass \repeat unfold 24 { c1 } }
+>>`;
+    const result = await convert(
+      [{ path: 'names.ly', content: source }],
+      { device: 'kobo-sage', outputs: ['png'] },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const pages = result.outputs[0]?.pngPages ?? [];
+    expect(pages.length).toBeGreaterThan(0);
+    for (const page of pages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+  });
+
   it('applies the staff size: 17 pt gives a staff space of about 17.7 px at 300 dpi', async () => {
     const files: ProjectFile[] = [
       { path: 'staff.ly', content: String.raw`\header { tagline = ##f } \new Staff { s1*8 }` },

@@ -4,7 +4,7 @@
 % "Oh! Susanna" (1848; composer died 1864, public domain). Lyrics: the traditional
 % public domain text. Chords and arrangement are our own.
 % Exercises: ChordNames, FretBoards with predefined-ukulele-fretboards.ly, TabStaff with
-% ukulele-tuning, lyrics in two stanzas, volta repeat, pickup measure.
+% ukulele-tuning, lyrics in two stanzas (one syllable per note), pickup measure.
 
 \include "predefined-ukulele-fretboards.ly"
 
@@ -25,18 +25,16 @@ global = {
 melody = \relative c' {
   \global
   \partial 4 c8 d |
-  \repeat volta 2 {
-    e4 g g a8 g | e8 e d c d c d4 |
-    c8 d e4 g g | a8 g e c d4 d |
-    d8 e e d d4 c4 |
-  }
+  e4 g g a8 g | e8 e d c d c d4 |
+  c8 d e4 g g | a8 g e c d4 d |
+  e8 e d4 c2 \bar "|."
 }
 
 harmonies = \chordmode {
   \partial 4 c4 |
   c1 | c2 g:7 |
-  c1 | f2 c |
-  g2.:7 c4 |
+  c1 | f2 g:7 |
+  c1 |
 }
 
 verseOne = \lyricmode {

@@ -13,6 +13,9 @@
   tagline = "CC0 1.0 – public domain dedication"
 }
 
+% Instrument names are deliberately omitted: a known overlay bug clips short instrument
+% names on later systems at the left page edge (fixed separately; see corpus.test.ts).
+
 global = {
   \key c \major
   \time 4/4

@@ -2,9 +2,10 @@
 % lily-on-eink test corpus, CC0 1.0 Universal (public domain dedication).
 % Original accordion arrangement written for this corpus. Melody: the traditional German
 % children's song "Alle meine Entchen" (folk tune, public domain).
-% Exercises: treble staff with register marks (boxed markup; the discant markup is not
-% available in this engine), Stradella bass notation (bass and chord buttons), chord names,
-% dynamics, volta repeat, staccato.
+% Exercises: accordion register symbols (\discant, \stdBass from (lily accreg)), Stradella
+% bass notation (bass and chord buttons), chord names, dynamics, volta repeat, staccato.
+
+#(use-modules (lily accreg))
 
 \header {
   title = "Alle meine Entchen"
@@ -25,6 +26,9 @@ chordNamesMusic = \chordmode {
   f1 | c1 | f1 | c1 |
   g1:7 | c1 |
 }
+
+% The volta repeat is not unfolded for ChordNames, so list all 20 bars (A, then A').
+chordNamesAll = { \chordNamesMusic \chordNamesMusic }
 
 % Right hand, plain melody
 rightA = \relative c' {
@@ -54,14 +58,14 @@ left = {
 
 \score {
   <<
-    \new ChordNames \chordNamesMusic
+    \new ChordNames \chordNamesAll
     \new PianoStaff <<
       \new Staff = "right" {
         \global
         \clef treble
-        \mark \markup { \box \bold "Master" }
+        \mark \markup { \discant "111" }
         \repeat volta 2 { \rightA }
-        \mark \markup { \box \bold "Violin" }
+        \mark \markup { \discant "110" }
         \rightB
         \bar "|."
       }
@@ -69,6 +73,7 @@ left = {
       \new Staff = "left" {
         \global
         \clef bass
+        <>_\markup { \stdBass "Master" }
         \repeat volta 2 { \left }
         \left
       }
