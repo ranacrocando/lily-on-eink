@@ -219,6 +219,14 @@ The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, be
   - A `\paper` block inside `\book` or `\bookpart` is not covered yet; its title markups stay as the user wrote them.
 - `\wordwrap-field` is not used: it returns an empty stencil for markup values and is left-aligned.
 
+**Top-level markup.**
+- Every top-level `\markup` and `\markuplist`, also inside `\book` and `\bookpart`, is kept within the line width. The overlay wraps LilyPond's `toplevel-text-handler`, `book-text-handler` and `bookpart-text-handler`: each receives the text as a markup list (a `\markup` is a list of one), and the overlay passes it on wrapped in its markup list command `\lily-on-eink-fit-lines`.
+- A markup that fits is drawn **unchanged** (same stencil, same position).
+- A markup that is too wide is **scaled down** uniformly to the line width (it then fills the line, so it stays where it was, flush left or centred alike). Scaling keeps the author's layout and is right for the common case of a markup that is a little too wide (Leise: about 90 %).
+- Scaling below **70 %** (`lily-on-eink:min-scale`) makes text hard to read on a 6–8" screen. In that case the markup is **reflowed** first: every `\line` and `\fill-line` in it, at any depth, is replaced by `\lily-on-eink-flow`, which draws the original where it fits and otherwise lays out its items left to right in rows that fit the line (first fit, flush left, rows half a `baseline-skip` apart). An item followed by a much taller item (a verse number before its `\column`) stays on that item's row. Side-by-side verses so become one or two columns at full size. If the reflowed markup is still too wide (a single item wider than the line), it is scaled down as well.
+- Lines of a markup list command (`\column-lines`, `\wordwrap-lines`, …) are scaled down individually if too wide; they are not reflowed (they are lines already).
+- Reflowing only `\line` and `\fill-line` is deliberate: those are the commands that put things side by side in verse and text blocks. Other layouts (`\concat`, `\combine`, `\overlay`, tables) are only ever scaled, so they never change shape unexpectedly.
+
 **Tagline.**
 - Kept by default, because taglines often carry license or attribution text. It is rendered one size smaller and wrapped with the same custom markup command, by `\lily-on-eink-footer`.
 - `keepTagline: false` drops it.

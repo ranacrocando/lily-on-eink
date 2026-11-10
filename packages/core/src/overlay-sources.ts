@@ -194,4 +194,140 @@ lilyOnEinkBookTitleMarkup = \markup {
 lilyOnEinkScoreTitleMarkup = \markup \lily-on-eink-score-title
 lilyOnEinkFooterMarkup = \markup \lily-on-eink-footer
 lilyOnEinkPageHeaderMarkup = \markup \lily-on-eink-page-header
+
+% --- Top-level markup that fits the page width ----------------------------------------------
+% Every top-level \markup and \markuplist (also inside \book and \bookpart) is handed to
+% LilyPond wrapped in \lily-on-eink-fit-lines, so no markup line is wider than the line width.
+% A markup that fits is drawn unchanged. One that is too wide is scaled down to the line
+% width; if that would shrink it below lily-on-eink:min-scale, its \line and \fill-line parts
+% are first reflowed into rows (side-by-side verses become one column), and the result is
+% scaled only if it is still too wide.
+
+% Smallest scale factor before reflowing is tried; below this, text gets hard to read.
+#(define lily-on-eink:min-scale 0.7)
+
+% Moves a stencil so that its left edge is at X = 0.
+#(define (lily-on-eink:flush-left stil)
+   (if (ly:stencil-empty? stil X)
+       stil
+       (ly:stencil-translate-axis stil (- (car (ly:stencil-extent stil X))) X)))
+
+% Scales a stencil that is wider than @var{width} down to it, flush left (it then fills the
+% line, so centred and flush-left placement coincide). A stencil that fits is not moved.
+#(define (lily-on-eink:fit-stencil stil width)
+   (if (> (lily-on-eink:width stil) width)
+       (lily-on-eink:flush-left (lily-on-eink:shrink-to stil width))
+       stil))
+
+#(define (lily-on-eink:height stil)
+   (if (ly:stencil-empty? stil Y) 0 (interval-length (ly:stencil-extent stil Y))))
+
+% Puts @var{right} to the right of @var{left}, @var{gap} apart.
+#(define (lily-on-eink:beside left right gap)
+   (ly:stencil-combine-at-edge left X RIGHT right gap))
+
+% Joins each item that is followed by a much taller item (a verse number before its verse)
+% with that item, so that a row break never separates them.
+#(define (lily-on-eink:glue-labels stils gap)
+   (let loop ((rest stils) (done '()))
+     (cond
+      ((null? rest) (reverse done))
+      ((and (pair? (cdr rest))
+            (> (lily-on-eink:height (cadr rest)) (* 1.5 (lily-on-eink:height (car rest)))))
+       (loop (cddr rest) (cons (lily-on-eink:beside (car rest) (cadr rest) gap) done)))
+      (else (loop (cdr rest) (cons (car rest) done))))))
+
+% Stacks stencils top down, flush left, @var{gap} apart (ink extents).
+#(define (lily-on-eink:stack-flush-left stils gap)
+   (fold (lambda (next above)
+           (ly:stencil-combine-at-edge above Y DOWN (lily-on-eink:flush-left next) gap))
+         (lily-on-eink:flush-left (car stils))
+         (cdr stils)))
+
+% Lays out stencils left to right, @var{gap} apart, starting a new row whenever the next one
+% would cross @var{width} (first fit). Rows are stacked top down, @var{row-gap} apart.
+#(define (lily-on-eink:rows stils width gap row-gap)
+   (let loop ((rest stils) (row #f) (rows '()))
+     (cond
+      ((null? rest)
+       (let ((rows (reverse (if row (cons row rows) rows))))
+         (if (null? rows) empty-stencil (lily-on-eink:stack-flush-left rows row-gap))))
+      ((not row) (loop (cdr rest) (car rest) rows))
+      (else
+       (let ((longer (lily-on-eink:beside row (car rest) gap)))
+         (if (<= (lily-on-eink:width longer) width)
+             (loop (cdr rest) longer rows)
+             (loop (cdr rest) (car rest) (cons row rows))))))))
+
+#(define-markup-command (lily-on-eink-flow layout props original items) (markup? markup-list?)
+   "Draws @var{original} when it fits the line width. Otherwise draws @var{items} left to
+right in rows that fit the line width, keeping an item that is followed by a much taller one
+(a verse number before its verse) on the row of that one."
+   (let ((width (lily-on-eink:available-width layout props))
+         (stil (interpret-markup layout props original)))
+     (if (<= (lily-on-eink:width stil) width)
+         stil
+         (let ((gap (chain-assoc-get 'word-space props 0.6))
+               (skip (chain-assoc-get 'baseline-skip props 3))
+               (stils (remove (lambda (s) (ly:stencil-empty? s X))
+                              (interpret-markup-list layout props items))))
+           ;; Items side by side get a wider gap than a label and its item, so that two
+           ;; verses on one row read as two columns.
+           (lily-on-eink:rows (lily-on-eink:glue-labels stils gap) width (* 4 gap) (/ skip 2))))))
+
+% A copy of markup @var{m} in which every \line and \fill-line, at any depth, becomes a
+% \lily-on-eink-flow: drawn as before where it fits, in rows where it does not.
+#(define (lily-on-eink:flowing m)
+   (cond
+    ((not (and (pair? m) (markup? m))) m)
+    ((memq (car m) (list line-markup fill-line-markup))
+     (make-lily-on-eink-flow-markup m (map lily-on-eink:flowing (cadr m))))
+    (else
+     (cons (car m)
+           (map (lambda (arg)
+                  (cond
+                   ((markup? arg) (lily-on-eink:flowing arg))
+                   ((and (pair? arg) (markup-list? arg)) (map lily-on-eink:flowing arg))
+                   (else arg)))
+                (cdr m))))))
+
+#(define-markup-command (lily-on-eink-fit layout props arg) (markup?)
+   "Draws @var{arg} unchanged when it fits the line width. Otherwise scales it down to the
+line width; when that would scale it below @code{lily-on-eink:min-scale}, its line layouts
+are reflowed into rows first."
+   (let* ((width (lily-on-eink:available-width layout props))
+          (stil (interpret-markup layout props arg))
+          (w (lily-on-eink:width stil)))
+     (cond
+      ((<= w width) stil)
+      ((>= (/ width w) lily-on-eink:min-scale) (lily-on-eink:fit-stencil stil width))
+      (else
+       (let ((flowed (interpret-markup layout props (lily-on-eink:flowing arg))))
+         (lily-on-eink:fit-stencil (if (< (lily-on-eink:width flowed) w) flowed stil) width))))))
+
+#(define-markup-list-command (lily-on-eink-fit-lines layout props args) (markup-list?)
+   "The lines of @var{args}, none wider than the line width: each markup goes through
+@code{\\lily-on-eink-fit}; each line of a markup list command is scaled down if too wide."
+   (let ((width (lily-on-eink:available-width layout props)))
+     (append-map
+      (lambda (m)
+        (if (markup? m)
+            (list (interpret-markup layout props (make-lily-on-eink-fit-markup m)))
+            (map (lambda (s) (lily-on-eink:fit-stencil s width))
+                 (interpret-markup-list layout props (list m)))))
+      args)))
+
+% LilyPond passes every top-level text (a \markup arrives as a list of one) to one of these
+% handlers. The originals are kept under our own names and called with the fitted text.
+#(define lily-on-eink:toplevel-text-handler toplevel-text-handler)
+#(define lily-on-eink:book-text-handler book-text-handler)
+#(define lily-on-eink:bookpart-text-handler bookpart-text-handler)
+#(define (lily-on-eink:fitted text) (make-lily-on-eink-fit-lines-markup-list text))
+#(define (toplevel-text-handler text)
+   (lily-on-eink:toplevel-text-handler (lily-on-eink:fitted text)))
+#(define (book-text-handler book text)
+   (lily-on-eink:book-text-handler book (lily-on-eink:fitted text)))
+#(define (bookpart-text-handler book text)
+   (lily-on-eink:bookpart-text-handler book (lily-on-eink:fitted text)))
+
 `;

@@ -188,12 +188,8 @@ describe('corpus on kobo-sage', () => {
     for (const page of pngPages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
   };
 
-  it.each([CASES[0], CASES[1]])('$name draws nothing within 1.5 mm of the page edge', expectBandWhite);
-
-  // KNOWN FAILURE, deferred to the hardening plan (markup scaling outside the titles):
-  // leise-rieselt's two-column verse markup is wider than the line, right edge.
-  // `it.fails` turns red as soon as the case passes, so this flips back to `it` when fixed.
-  it.fails('leise-rieselt draws nothing within 1.5 mm of the page edge', () => expectBandWhite(CASES[2]));
+  // leise-rieselt's two-column verse markup is wider than the line; the overlay scales it down.
+  it.each(CASES)('$name draws nothing within 1.5 mm of the page edge', expectBandWhite);
 
   it('applies the staff size: 17 pt gives a staff space of about 17.7 px at 300 dpi', async () => {
     const files: ProjectFile[] = [
@@ -450,5 +446,81 @@ ${opts.score ?? MUSIC}
     const box = titleInk(page, true);
     expect(box.left).toBeGreaterThanOrEqual(lineLeftPx - 3);
     expect(box.width - 1 - box.right).toBeGreaterThanOrEqual(lineRightPx - 3);
+  });
+});
+
+describe('top-level markup on kobo-sage', () => {
+  const device = getDevice('kobo-sage');
+  const pxPerMm = device.ppi / 25.4;
+  const margins = effectiveMarginsMm(getProfile('leadsheet'), device);
+  const lineRightPx = margins.right * pxPerMm;
+  const MUSIC = String.raw`\relative c'' { \time 3/4 c4 d e | f2. | e4 d c | c2. \bar "|." }`;
+  const VERSE = String.raw`\line { \bold "2." \column { "Morning light on the river," "boats drift slowly along," "gulls are calling the harbour," "humming their morning song." } }`;
+
+  /** Page 1 of `files` on kobo-sage with the leadsheet profile and no tagline. */
+  async function renderPage(name: string, files: ProjectFile[]): Promise<Uint8Array> {
+    const result = await convert(
+      files,
+      { device: 'kobo-sage', profile: 'leadsheet', outputs: ['png'], keepTagline: false },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const page = result.outputs[0]?.pngPages?.[0];
+    expect(page).toBeDefined();
+    savePages(`markup-${name}`, [page!]);
+    return page!;
+  }
+
+  /**
+   * Height of the lowest block of ink on the page: the markup after the score. The block ends
+   * (upwards) at the first run of `gap` blank rows; lines and rows of verses are closer than
+   * that, the last system is further away.
+   */
+  const markupHeight = (page: Uint8Array, gap = 40) => {
+    const { width, height, data } = PNG.sync.read(Buffer.from(page));
+    const inked = (y: number) => {
+      for (let x = 0; x < width; x++) if (data[(y * width + x) * 4]! < 128) return true;
+      return false;
+    };
+    let bottom = height - 1;
+    while (bottom >= 0 && !inked(bottom)) bottom--;
+    let top = bottom;
+    for (let y = bottom, blank = 0; y >= 0 && blank < gap; y--) {
+      if (inked(y)) {
+        top = y;
+        blank = 0;
+      } else blank++;
+    }
+    return bottom - top + 1;
+  };
+
+  it('reflows four side-by-side verses into rows at full size instead of shrinking them', async () => {
+    const page = await renderPage('wide-verses', loadCorpusDir('leadsheet/wide-verses'));
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    // Reference: one verse of four lines, which fits unscaled. Scaled down to fit, the four
+    // verses side by side would be about half as high as that; reflowed into two rows of two,
+    // they are about twice as high.
+    const reference = await renderPage('one-verse', [
+      { path: 'one-verse.ly', content: `${MUSIC}\n\\markup ${VERSE}\n` },
+    ]);
+    expect(markupHeight(page)).toBeGreaterThan(1.8 * markupHeight(reference));
+  });
+
+  it('scales a slightly too wide markup and markup list line down to the line width', async () => {
+    const wide = 'A remark that is a little too wide for the narrow page of an e-reader, by some way.';
+    const page = await renderPage('slightly-wide', [
+      {
+        path: 'slightly-wide.ly',
+        content: String.raw`${MUSIC}
+\markup \line { "${wide}" }
+\markuplist \column-lines { "Short line." "${wide}" }
+`,
+      },
+    ]);
+    expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    const box = titleInk(page, true);
+    expect(box.width - 1 - box.right).toBeGreaterThanOrEqual(lineRightPx - 3);
+    // Scaled, not reflowed: the remark still fills the line.
+    expect(box.right).toBeGreaterThan(box.width - lineRightPx - 10);
   });
 });
