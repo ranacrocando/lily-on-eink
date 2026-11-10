@@ -1,0 +1,109 @@
+name: Release
+# Runs only when a release is published (or by hand for an existing release), never on a tag alone.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (vX.Y.Z)
+        required: true
+        type: string
+      force:
+        description: Replace assets that already exist on the release (changes the tarball bytes)
+        required: false
+        default: false
+        type: boolean
+concurrency:
+  # Releases are never cancelled; a second run for the same tag waits.
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Check that the tag matches the package versions
+        run: |
+          node -e '
+            const read = (p) => JSON.parse(require("node:fs").readFileSync(p, "utf8"));
+            const core = read("packages/core/package.json");
+            const engine = read("packages/engine-wasm/package.json");
+            const want = process.env.TAG;
+            const got = {
+              "core version": `v${core.version}`,
+              "engine-wasm version": `v${engine.version}`,
+              "engine-wasm dependency on core": `v${engine.dependencies["@lily-on-eink/core"]}`,
+            };
+            let ok = /^v\d+\.\d+\.\d+$/.test(want);
+            for (const [name, v] of Object.entries(got)) {
+              console.log(`${name}: ${v} (tag ${want})`);
+              if (v !== want) ok = false;
+            }
+            if (!ok) {
+              console.error("Tag and package versions differ. Delete the release and the tag, fix the versions via a PR, and release again.");
+              process.exit(1);
+            }
+          '
+      - name: Pack
+        run: |
+          mkdir tarballs
+          npm pack -w packages/core -w packages/engine-wasm --pack-destination tarballs
+          ls -l tarballs
+      - name: Smoke install
+        run: node scripts/smoke-install.mjs tarballs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tarballs
+          path: tarballs/*.tgz
+          if-no-files-found: error
+  upload:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      FORCE: ${{ inputs.force }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: tarballs
+          path: tarballs
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The app lockfile pins integrity hashes and a rebuilt tarball can differ byte for byte,
+          # so existing assets are kept unless force is set.
+          existing="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          for file in tarballs/*.tgz; do
+            name="$(basename "$file")"
+            if grep -Fxq -- "$name" <<<"$existing"; then
+              if [ "$FORCE" = "true" ]; then
+                echo "replacing $name"
+                gh release upload "$TAG" "$file" --clobber
+              else
+                echo "keeping existing $name"
+              fi
+            else
+              echo "uploading $name"
+              gh release upload "$TAG" "$file"
+            fi
+          done

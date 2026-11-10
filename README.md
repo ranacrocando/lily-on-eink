@@ -60,6 +60,14 @@ npm run convert -- score.ly --device kobo-sage --profile organ --out out
 
 The convert script takes files or folders, plus `--device`, `--profile`, `--out` and `--no-tagline`.
 
+## Releasing
+
+1. Bump `packages/core` and `packages/engine-wasm` to the new version, including engine-wasm's dependency on core, via a PR.
+2. On GitHub, create a release (Releases, Draft a new release) with a new tag `vX.Y.Z` on `main`, and publish it. A tag alone builds nothing.
+3. The Release workflow checks that the tag equals all three versions, runs the tests, smoke-installs the tarballs and uploads them to the release. Assets that already exist are kept, because the app lockfile pins their hashes. To re-run for an existing release, start the workflow by hand with the tag; `force` replaces existing assets.
+
+If the version check fails, delete the release and the tag, fix the versions via a PR, and release again. Do not enable GitHub's "immutable releases": it blocks the upload after publishing. To test the tarballs locally: `npm pack -w packages/core -w packages/engine-wasm --pack-destination out`, then `node scripts/smoke-install.mjs out`.
+
 ## License
 
 `packages/core` is MIT. `packages/engine-wasm` is GPL-3.0-or-later. Test scores in `corpus/` are licensed per file. See `REUSE.toml` and the design spec, section 2.
