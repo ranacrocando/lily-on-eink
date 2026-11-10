@@ -233,3 +233,40 @@ describe('convert', () => {
     expect(requests[0]!.signal).toBe(controller.signal);
   });
 });
+
+describe('convert version warnings', () => {
+  const warned = (r: { diagnostics: { message: string; file: string }[] }) =>
+    r.diagnostics.filter((d) => d.message.includes('LilyPond (')).map((d) => d.file).sort();
+
+  it('warns once per file of the converted project only', async () => {
+    const { engine } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'a.ly', content: String.raw`\version "2.22.0" \include "inc.ily" { c'1 }` },
+      { path: 'inc.ily', content: String.raw`\version "2.18.2"` },
+      { path: 'other/b.ily', content: String.raw`\version "2.10.0"` },
+    ];
+    const r = await convert(files, { ...sage, mainFiles: ['a.ly'] }, engine);
+    expect(warned(r)).toEqual(['a.ly', 'inc.ily']);
+    expect(r.diagnostics.filter((d) => d.file === 'a.ly' || d.file === 'inc.ily').every((d) => d.severity === 'warning')).toBe(true);
+  });
+
+  it('warns once for an include shared by two main files', async () => {
+    const { engine } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'a.ly', content: String.raw`\version "2.24.0" \include "inc.ily" { c'1 }` },
+      { path: 'b.ly', content: String.raw`\version "2.24.0" \include "inc.ily" { d'1 }` },
+      { path: 'inc.ily', content: String.raw`\version "2.18.2"` },
+    ];
+    const r = await convert(files, sage, engine);
+    expect(warned(r)).toEqual(['inc.ily']);
+  });
+
+  it('gives no version warning for a file skipped because of a missing include', async () => {
+    const { engine, requests } = fakeEngine();
+    const files: ProjectFile[] = [{ path: 'a.ly', content: String.raw`\version "2.18.2" \include "missing.ily" { c'1 }` }];
+    const r = await convert(files, sage, engine);
+    expect(requests).toHaveLength(0);
+    expect(warned(r)).toEqual([]);
+    expect(r.diagnostics.some((d) => d.severity === 'error')).toBe(true);
+  });
+});

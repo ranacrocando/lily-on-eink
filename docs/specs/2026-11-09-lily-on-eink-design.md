@@ -79,13 +79,13 @@ lily-on-eink (monorepo, npm workspaces)               lily-on-eink-app (GPL)
 ┌───────────────────────────────────────────┐        ┌────────────────────────────┐
 │ packages/core (MIT)                       │        │ Static site (Vite + TS)    │
 │   ly/lily-on-eink.ily  (overlay)          │        │  ├ UI (plain DOM)          │
-│   presets/devices.json, profiles.json     │◄───────┤  ├ Web Worker → core       │
-│   devices · profiles · wrapper · project  │        │  │    + engine-wasm        │
-│   diagnostics · convert() · Engine (type) │        │  └ GitHub Pages            │
-│ packages/engine-wasm (GPL) → lilypond-wasm│◄───────┤                            │
-│ scripts/convert (dev script, not shipped) │        └────────────────────────────┘
-│ corpus/ + tests                           │
-└───────────────────────────────────────────┘
+│   presets/devices.json, profiles.json     │◄───────┤  ├ core (main thread)      │
+│   devices · profiles · wrapper · project  │        │  │                         │
+│   diagnostics · convert() · Engine (type) │        │  │                         │
+│ packages/engine-wasm (GPL) → lilypond-wasm│◄───────┤  └ engine: one Web Worker  │
+│ scripts/convert (dev script, not shipped) │        │                            │
+│ corpus/ + tests                           │        │ hosted on GitHub Pages     │
+└───────────────────────────────────────────┘        └────────────────────────────┘
 ```
 
 ### How the app gets the core
@@ -381,7 +381,7 @@ A published CLI (`packages/cli`, GPL) is **not part of the MVP**. The MVP is the
 
 ## 7. Web app (`lily-on-eink-app`, M2)
 
-**Stack:** Vite, TypeScript and plain DOM, no UI framework. Compiles run in a Web Worker; cancel and timeout abort the running compile (§3).
+**Stack:** Vite, TypeScript and plain DOM, no UI framework. Core runs on the main thread. The engine package runs compiles in one Web Worker that it keeps across compiles (respawned after an abort or timeout); cancel and timeout abort the running compile (§3).
 
 ### Flow
 

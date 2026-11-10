@@ -1,3 +1,5 @@
+import type { Diagnostic } from './diagnostics.js';
+
 // Candidate for an engine-provided list.
 export const BUILTIN_INCLUDES: readonly string[] = [
   'english.ly',
@@ -126,4 +128,39 @@ export function analyzeProject(
   }
   const mainFiles = [...known].filter((p) => /\.ly$/i.test(p) && !included.has(p)).sort();
   return { mainFiles, missingIncludes, versions };
+}
+
+/** Parses "2.24.1" style versions to [major, minor]; undefined if unparseable. */
+function parseVersion(raw: string): [number, number] | undefined {
+  const m = /^\s*(\d+)\.(\d+)(?:\.\d+)*/.exec(raw);
+  return m ? [Number(m[1]), Number(m[2])] : undefined;
+}
+
+const olderThan = ([major, minor]: [number, number], maj: number, min: number) =>
+  major < maj || (major === maj && minor < min);
+
+/**
+ * Warnings for files written for old LilyPond versions (input: `analyzeProject(...).versions`).
+ * Files without a parseable version produce nothing. Line is 0 because the position is not known.
+ */
+export function versionWarnings(versions: Record<string, string>): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (const [file, raw] of Object.entries(versions)) {
+    const v = parseVersion(raw);
+    if (!v) continue;
+    const shown = raw.trim();
+    let message: string;
+    if (olderThan(v, 2, 20)) {
+      message =
+        `${file} was written for a very old LilyPond (${shown}) and will probably not work as it is. ` +
+        `To update it to the current LilyPond format: 1. Install LilyPond from lilypond.org (it includes the convert-ly tool). ` +
+        `2. Run \`convert-ly -e "${file}"\` (this changes the file; keep a copy). 3. Upload the file again.`;
+    } else if (olderThan(v, 2, 24)) {
+      message =
+        `${file} was written for an older LilyPond (${shown}). It may still work. If the result looks wrong, ` +
+        `the file may need to be updated to the current LilyPond format with the convert-ly tool (it comes with LilyPond).`;
+    } else continue;
+    out.push({ file, line: 0, column: 0, severity: 'warning', message });
+  }
+  return out;
 }
