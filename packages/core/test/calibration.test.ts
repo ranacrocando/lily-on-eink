@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calibrationSource, CALIBRATION_SENTENCE } from '../src/calibration.js';
+import { calibrationSource, CALIBRATION_HINT, CALIBRATION_SENTENCE, wrapWords } from '../src/calibration.js';
 import { getDevice, pageSizeMm, type DeviceSpec } from '../src/devices.js';
 
 const sage = getDevice('kobo-sage');
@@ -54,7 +54,40 @@ describe('calibrationSource', () => {
     expect(src).not.toContain('"My "Reader"');
   });
 
-  it('escapes the version string', () => {
-    expect(calibrationSource(sage, '2.26"0')).toContain(String.raw`\version "2.26\"0"`);
+  it('replaces newlines in the device name by a space and keeps non-ASCII Latin letters', () => {
+    const device: DeviceSpec = { ...sage, name: 'Tolino Vision\nGröße é' };
+    const src = calibrationSource(device, '2.26.0');
+    expect(src).toContain('"Tolino Vision Größe é"');
+    expect(src).not.toContain('Vision\n');
+  });
+
+  it('shrinks a long device name, down to a minimum size', () => {
+    const nameSize = (name: string): number => {
+      const m = /abs-fontsize #([\d.]+) \\center-align \\bold/.exec(calibrationSource({ ...sage, name }, '2.26.0'));
+      return Number(m?.[1]);
+    };
+    expect(nameSize(sage.name)).toBe(13);
+    expect(nameSize('A rather long custom device name, really')).toBeLessThan(13);
+    expect(nameSize('A rather long custom device name'.repeat(5))).toBe(7);
+  });
+
+  it('shows the hint about the depth ruler', () => {
+    const strings = [...calibrationSource(sage, '2.26.0').matchAll(/"([^"\\]*)"/g)].map((m) => m[1]).join(' ');
+    expect(strings).toContain(CALIBRATION_HINT);
+  });
+
+  it('rejects a version that is not a dotted number', () => {
+    expect(() => calibrationSource(sage, '2.26"0')).toThrow(/version/i);
+  });
+});
+
+describe('wrapWords', () => {
+  it('balances the lines instead of leaving an orphan', () => {
+    const lines = wrapWords('aaa bbb ccc ddd eee fff', 14);
+    expect(lines).toEqual(['aaa bbb ccc', 'ddd eee fff']);
+  });
+
+  it('keeps a text that fits on one line', () => {
+    expect(wrapWords('short text', 40)).toEqual(['short text']);
   });
 });

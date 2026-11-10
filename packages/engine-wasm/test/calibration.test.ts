@@ -8,8 +8,8 @@ import { createWasmEngine } from '@lily-on-eink/engine-wasm';
 
 const TEST_OUTPUT = fileURLToPath(new URL('../../../test-output/', import.meta.url));
 const MM_PER_PT = 25.4 / 72;
-/** Dark pixels must exist this close to every page edge. */
-const EDGE_PX = 2;
+/** In the middle third of each edge, at least this share of the outermost row/column is dark. */
+const MIN_DARK_SHARE = 0.9;
 
 function latin1(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('latin1');
@@ -26,28 +26,36 @@ function pdfPageCount(pdf: Uint8Array): number {
 }
 
 /**
- * Number of dark pixels (all channels below 128) in the `EDGE_PX` px band along each edge of the
- * `widthPx` x `heightPx` page. The engine's PNG is 1 to 2 px larger than that, with white padding
- * at the right and bottom, so the page edge is not the image edge.
+ * Share of dark pixels (all channels below 128) in the middle third of the outermost row or
+ * column of the `widthPx` x `heightPx` device page, per edge.
+ *
+ * The engine rounds the page size up: its PNG is 1 to 2 px larger than the device, with white
+ * padding at the right and bottom (kobo-sage: 1442 x 1921 for 1440 x 1920). So the device edge
+ * is not the image edge, and a consumer must crop the PNG to the device size, not resize it.
  */
-function darkPixelsAtEdges(
+function edgeDarkShare(
   png: Uint8Array,
   widthPx: number,
   heightPx: number,
 ): { top: number; bottom: number; left: number; right: number } {
-  const { width, height, data } = PNG.sync.read(Buffer.from(png));
-  const counts = { top: 0, bottom: 0, left: 0, right: 0 };
-  for (let y = 0; y < Math.min(height, heightPx); y++) {
-    for (let x = 0; x < Math.min(width, widthPx); x++) {
-      const i = (y * width + x) * 4;
-      if (data[i]! >= 128 || data[i + 1]! >= 128 || data[i + 2]! >= 128) continue;
-      if (y < EDGE_PX) counts.top++;
-      if (y >= heightPx - EDGE_PX) counts.bottom++;
-      if (x < EDGE_PX) counts.left++;
-      if (x >= widthPx - EDGE_PX) counts.right++;
-    }
-  }
-  return counts;
+  const { width, data } = PNG.sync.read(Buffer.from(png));
+  const dark = (x: number, y: number): boolean => {
+    const i = (y * width + x) * 4;
+    return data[i]! < 128 && data[i + 1]! < 128 && data[i + 2]! < 128;
+  };
+  const share = (length: number, at: (i: number) => boolean): number => {
+    const from = Math.floor(length / 3);
+    const to = Math.ceil((2 * length) / 3);
+    let n = 0;
+    for (let i = from; i < to; i++) if (at(i)) n++;
+    return n / (to - from);
+  };
+  return {
+    top: share(widthPx, (x) => dark(x, 0)),
+    bottom: share(widthPx, (x) => dark(x, heightPx - 1)),
+    left: share(heightPx, (y) => dark(0, y)),
+    right: share(heightPx, (y) => dark(widthPx - 1, y)),
+  };
 }
 
 let engine: Engine;
@@ -71,7 +79,8 @@ describe('calibration page', () => {
       resolution: device.ppi,
     });
     expect(result.ok).toBe(true);
-    expect(result.log).not.toMatch(/error/i);
+    // No error and no warning, e.g. "page 1 has been compressed".
+    expect(result.log).not.toMatch(/error|warning/i);
 
     const pdf = result.files['score.pdf'];
     expect(pdf).toBeDefined();
@@ -90,10 +99,10 @@ describe('calibration page', () => {
     const size = PNG.sync.read(Buffer.from(png));
     expect(Math.abs(size.width - device.widthPx)).toBeLessThanOrEqual(2);
     expect(Math.abs(size.height - device.heightPx)).toBeLessThanOrEqual(2);
-    const dark = darkPixelsAtEdges(png, device.widthPx, device.heightPx);
-    expect(dark.top).toBeGreaterThan(0);
-    expect(dark.bottom).toBeGreaterThan(0);
-    expect(dark.left).toBeGreaterThan(0);
-    expect(dark.right).toBeGreaterThan(0);
+    const share = edgeDarkShare(png, device.widthPx, device.heightPx);
+    expect(share.top).toBeGreaterThanOrEqual(MIN_DARK_SHARE);
+    expect(share.bottom).toBeGreaterThanOrEqual(MIN_DARK_SHARE);
+    expect(share.left).toBeGreaterThanOrEqual(MIN_DARK_SHARE);
+    expect(share.right).toBeGreaterThanOrEqual(MIN_DARK_SHARE);
   });
 });
