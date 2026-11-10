@@ -8,8 +8,15 @@ export interface WrapperOptions {
   staffSize: number;
   keepTagline: boolean;
   lilypondVersion: string;
-  /** Test only: raw lines appended to the \paper block. Not exposed through convert(). */
+  /**
+   * Test only: raw lines appended to the \paper block. Not exposed through convert(). Paper
+   * size, margins, line-width, indent and short-indent set here are overwritten by the
+   * overlay's book handler (indents only where instrument names need more room), unless
+   * `omitConfigure` is set.
+   */
   extraPaper?: string;
+  /** Test only: leave out the configure! call, so the overlay's book handler stays idle. */
+  omitConfigure?: boolean;
 }
 
 export interface Wrapper {
@@ -18,12 +25,11 @@ export interface Wrapper {
 }
 
 // Known slice limits (to be fixed in the hardening plan):
-// - \book blocks with their own \paper are not overridden;
-// - a file-level line-width is not overridden;
 // - custom page headers and footers (odd/even Header/FooterMarkup) and a user's
 //   bookTitleMarkup (also `= ##f`) are replaced by the overlay's markups.
 // Deliberately no set-paper-size (it would rescale margins and indent from A4)
-// and no indent override.
+// and no indent override here: the overlay's book handler widens indent and short-indent
+// only where instrument names need it.
 
 /**
  * Extra left margin (mm) on top of the profile margin. LilyPond draws system-start brackets,
@@ -43,16 +49,26 @@ function escapeLilyString(s: string): string {
 
 export function buildWrapper(opts: WrapperOptions): Wrapper {
   const m = opts.marginsMm;
+  const left = m.left + SYSTEM_START_ALLOWANCE_MM;
   const lines = [
     String.raw`\version "${escapeLilyString(opts.lilypondVersion)}"`,
     String.raw`\include "lily-on-eink.ily"`,
+    // Device settings for the overlay's book handler, which re-applies them to the paper of
+    // every \book and \bookpart (their own \paper blocks included) just before it is printed.
+    ...(opts.omitConfigure
+      ? []
+      : [
+          String.raw`#(lily-on-eink:configure! '((paper-width . ${num(opts.pageMm.width)}) (paper-height . ${num(opts.pageMm.height)})`,
+          String.raw`  (top-margin . ${num(m.top)}) (bottom-margin . ${num(m.bottom)}) (left-margin . ${num(left)}) (right-margin . ${num(m.right)})`,
+          String.raw`  (staff-size . ${num(opts.staffSize)}) (keep-tagline . ${opts.keepTagline ? '#t' : '#f'})))`,
+        ]),
     String.raw`\include "${escapeLilyString(opts.mainBasename)}"`,
     String.raw`\paper {`,
     String.raw`  paper-width = ${num(opts.pageMm.width)}\mm`,
     String.raw`  paper-height = ${num(opts.pageMm.height)}\mm`,
     String.raw`  top-margin = ${num(m.top)}\mm`,
     String.raw`  bottom-margin = ${num(m.bottom)}\mm`,
-    String.raw`  left-margin = ${num(m.left + SYSTEM_START_ALLOWANCE_MM)}\mm`,
+    String.raw`  left-margin = ${num(left)}\mm`,
     String.raw`  right-margin = ${num(m.right)}\mm`,
     String.raw`  ragged-last-bottom = ##t`,
     String.raw`  print-page-number = ##f`,

@@ -67,9 +67,11 @@ describe('convert', () => {
     expect(requests[0]!.source).toContain('(set-global-staff-size 18)');
     expect(requests[0]!.source).toContain(String.raw`left-margin = 6\mm`);
     expect(requests[0]!.source).toContain(String.raw`\header { tagline = ##f }`);
+    expect(requests[0]!.source).toContain('(keep-tagline . #f)');
     await convert([{ path: 'a.ly', content: "{ c'1 }" }], { ...sage, staffSize: 15 }, engine);
     expect(requests[1]!.source).toContain('(set-global-staff-size 15)');
-    expect(requests[1]!.source).not.toContain('tagline');
+    expect(requests[1]!.source).not.toContain(String.raw`\header { tagline`);
+    expect(requests[1]!.source).toContain('(keep-tagline . #t)');
   });
 
   it('decodes binary .ly content for analysis', async () => {
