@@ -124,6 +124,35 @@ function darkRunCentres(png: Uint8Array, fraction: number, maxRun = 4): number[]
   return centres;
 }
 
+/**
+ * Blank space on a page, in mm at 300 dpi: the tallest run of blank rows (no channel below
+ * 200) between the first and the last inked row, and the blank rows below the last inked row.
+ * On a page of music the first is the widest vertical gap: between two systems, or between the
+ * titles and the first system. Throws on a page without ink.
+ */
+function blankMm(png: Uint8Array): { maxGap: number; bottom: number } {
+  const { width, height, data } = PNG.sync.read(Buffer.from(png));
+  const inked = (y: number) => {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (data[i]! < 200 || data[i + 1]! < 200 || data[i + 2]! < 200) return true;
+    }
+    return false;
+  };
+  const rows = Array.from({ length: height }, (_, y) => inked(y));
+  const first = rows.indexOf(true);
+  const last = rows.lastIndexOf(true);
+  if (first < 0) throw new Error('page has no ink');
+  let longest = 0;
+  let run = 0;
+  for (let y = first; y <= last; y++) {
+    run = rows[y] ? 0 : run + 1;
+    longest = Math.max(longest, run);
+  }
+  const mm = (px: number) => (px * 25.4) / 300;
+  return { maxGap: mm(longest), bottom: mm(height - 1 - last) };
+}
+
 function savePages(name: string, pages: Uint8Array[]): void {
   mkdirSync(TEST_OUTPUT, { recursive: true });
   pages.forEach((page, i) => {
@@ -151,6 +180,12 @@ afterAll(() => {
 });
 
 type Case = (typeof CASES)[number];
+
+function caseNamed(name: Case['name']): Case {
+  const found = CASES.find((c) => c.name === name);
+  if (!found) throw new Error(`no corpus case ${name}`);
+  return found;
+}
 const sageResults = new Map<string, Promise<ConvertResult>>();
 
 /** Converts a case once on kobo-sage (PDF and PNG); later tests reuse the result. */
@@ -261,9 +296,64 @@ describe('corpus on kobo-sage', () => {
     savePages('negative-control-indent-0', pages);
 
     // Only the left band next to the first staff, where the "Bass" instrument name sits.
-    const normal = (await convertOnSage(CASES[1])).outputs[0]!.pngPages![0]!;
+    const normal = (await convertOnSage(caseNamed('bass-etude'))).outputs[0]!.pngPages![0]!;
     expect(nonWhiteInBand(normal, BAND_PX, firstStaffRows(normal))).toBe(0);
     expect(nonWhiteInBand(pages[0]!, BAND_PX, firstStaffRows(pages[0]!))).toBeGreaterThan(0);
+  });
+
+  // Page 1 of the ukulele song sheet holds two tall systems. Filling the page used to put all
+  // free space between them (22.5 mm blank; 8 mm unstretched); the overlay now leaves most of
+  // it below the last system.
+  const UKULELE_MAX_GAP_MM = 16;
+
+  it('keeps the two systems on ukulele page 1 close together', async () => {
+    const { pngPages = [] } = (await convertOnSage(caseNamed('ukulele-susanna'))).outputs[0]!;
+    expect(pngPages).toHaveLength(2);
+    expect(blankMm(pngPages[0]!).maxGap).toBeLessThan(UKULELE_MAX_GAP_MM);
+  });
+
+  // A full page has no free space to share: reger page 1 still reaches the bottom margin
+  // (3 mm plus padding; 4.6 mm blank before and after the fill limit).
+  it('still fits reger on two pages and fills its first page', async () => {
+    const { pdf, pngPages = [] } = (await convertOnSage(caseNamed('reger'))).outputs[0]!;
+    expect(pdfPageCount(pdf!)).toBe(2);
+    expect(blankMm(pngPages[0]!).bottom).toBeLessThan(6);
+  });
+
+  /** PNG pages of the ukulele score inside a \book and \bookpart with its own \paper. */
+  async function ukuleleInBookpart(paper: string): Promise<Uint8Array[]> {
+    const files = loadCorpusDir('ukulele/oh-susanna').map((f) =>
+      f.path.endsWith('.ly')
+        ? {
+            path: f.path,
+            content:
+              String(f.content).replace(
+                String.raw`\score {`,
+                String.raw`\book { \bookpart { \paper { ` + paper + String.raw` } \score {`,
+              ) + '} }\n',
+          }
+        : f,
+    );
+    const result = await convert(files, { device: 'kobo-sage', profile: 'tab', outputs: ['png'] }, engine);
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    return result.outputs[0]?.pngPages ?? [];
+  }
+
+  it.each([
+    { name: 'default bottom stretchability (raised)', paper: 'last-bottom-spacing.stretchability = #30' },
+    { name: 'larger bottom stretchability (kept)', paper: 'last-bottom-spacing.stretchability = #500' },
+    { name: 'rigid system gaps (nothing to share)', paper: 'system-system-spacing.stretchability = #0' },
+  ])('limits the gap inside a bookpart with its own paper block: $name', async ({ paper }) => {
+    const pages = await ukuleleInBookpart(paper);
+    expect(pages).toHaveLength(2);
+    expect(blankMm(pages[0]!).maxGap).toBeLessThan(UKULELE_MAX_GAP_MM);
+  });
+
+  it('gives a bookpart that restates the default bottom stretchability the top-level gap', async () => {
+    const pages = await ukuleleInBookpart('last-bottom-spacing.stretchability = #30');
+    savePages('ukulele-bookpart', pages);
+    const topLevel = (await convertOnSage(caseNamed('ukulele-susanna'))).outputs[0]!.pngPages![0]!;
+    expect(Math.abs(blankMm(pages[0]!).maxGap - blankMm(topLevel).maxGap)).toBeLessThanOrEqual(0.5);
   });
 });
 
