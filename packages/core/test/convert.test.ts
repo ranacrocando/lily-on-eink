@@ -325,13 +325,13 @@ describe('convert version warnings', () => {
   it('lists every folder a copied file was placed in', async () => {
     const { engine, requests } = fakeEngine();
     const files: ProjectFile[] = [
-      { path: 'main.ly', content: String.raw`\include "a/v.ily" \include "b/v.ily"` },
+      { path: 'main.ly', content: String.raw`\include "a/v.ily" \include "b/v.ily" \include "c/v.ily"` },
       { path: 'v.ily', content: '' },
     ];
     const result = await convert(files, sage, engine);
-    expect(Object.keys(requests[0]!.files)).toEqual(expect.arrayContaining(['a/v.ily', 'b/v.ily']));
+    expect(Object.keys(requests[0]!.files)).toEqual(expect.arrayContaining(['a/v.ily', 'b/v.ily', 'c/v.ily']));
     expect(result.diagnostics.map((d) => d.message)).toEqual([
-      'v.ily was placed in a/ and b/ because main.ly includes it from there.',
+      'v.ily was placed in a/, b/ and c/ because main.ly includes it from there.',
     ]);
   });
 
@@ -349,17 +349,27 @@ describe('convert version warnings', () => {
     );
   });
 
-  it('warns about ambiguous flat uploads, moves nothing and still reports the missing include', async () => {
-    const { engine, requests } = fakeEngine();
+  it('does not warn for a folder upload with same-named files and keeps it unchanged', async () => {
+    const { engine } = fakeEngine();
     const files: ProjectFile[] = [
       { path: 'main.ly', content: String.raw`\include "parts/voice.ily"` },
-      { path: 'voice.ily', content: '' },
+      { path: 'parts/voice.ily', content: '' },
       { path: 'old/voice.ily', content: '' },
+    ];
+    const result = await convert(files, sage, engine);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('warns when the include structure cannot be sorted out and moves nothing', async () => {
+    const { engine, requests } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'main.ly', content: String.raw`\include "q/A.ily"` },
+      { path: 'A.ily', content: String.raw`\include "x/A.ily"` },
     ];
     const result = await convert(files, sage, engine);
     expect(requests).toHaveLength(0);
     expect(result.diagnostics.find((d) => d.severity === 'warning')?.message).toBe(
-      'Several uploaded files are called voice.ily, so it is unclear which one main.ly means by parts/voice.ily. Upload the whole project folder so the folder structure is kept.',
+      'The include structure could not be sorted out automatically. Upload the whole project folder so the folder structure is kept.',
     );
     expect(
       result.diagnostics.some((d) => d.severity === 'error' && d.message.includes('cannot find included file')),

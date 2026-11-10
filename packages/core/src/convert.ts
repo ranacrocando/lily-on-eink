@@ -73,6 +73,11 @@ const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) :
 const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const inDir = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 
+/** "a", "a and b", "a, b and c". */
+function listOf(items: string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] ?? ''}`;
+}
+
 function textOf(content: Uint8Array | string): string {
   return typeof content === 'string' ? content : new TextDecoder().decode(content);
 }
@@ -186,20 +191,30 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
     placedBy.set(m.from, placedBy.get(m.from) ?? m.includedBy);
     placedBy.set(m.to, m.includedBy);
   }
-  texts = applyMoves(texts, plan.moves);
-  engineFiles = applyMoves(engineFiles, plan.moves);
+  texts = applyMoves(texts, plan.moves, plan.keptAtTop);
+  engineFiles = applyMoves(engineFiles, plan.moves, plan.keptAtTop);
   for (const group of byFrom.values()) {
     const first = group[0];
     if (!first) continue;
-    const where = group.map((m) => (dirOf(m.to) ? `${dirOf(m.to)}/` : 'the top folder')).join(' and ');
+    const where = listOf(group.map((m) => `${dirOf(m.to)}/`));
     const includers = [...new Set(group.map((m) => m.includedBy))];
-    const who = includers.length === 1 ? `${includers[0]} includes` : `${includers.join(', ')} include`;
+    const who = `${listOf(includers)} ${includers.length === 1 ? 'includes' : 'include'}`;
     diagnostics.push({
       file: first.includedBy,
       line: first.line,
       column: 0,
       severity: 'info',
       message: `${baseOf(first.to)} was placed in ${where} because ${who} it from there.`,
+    });
+  }
+  if (plan.gaveUp) {
+    diagnostics.push({
+      file: '',
+      line: 0,
+      column: 0,
+      severity: 'warning',
+      message:
+        'The include structure could not be sorted out automatically. Upload the whole project folder so the folder structure is kept.',
     });
   }
   for (const a of plan.ambiguous) {
