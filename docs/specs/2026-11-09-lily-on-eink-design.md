@@ -80,12 +80,12 @@ lily-on-eink (monorepo, npm workspaces)               lily-on-eink-app (GPL)
 │ packages/core (MIT)                       │        │ Static site (Vite + TS)    │
 │   ly/lily-on-eink.ily  (overlay)          │        │  ├ UI (plain DOM)          │
 │   presets/devices.json, profiles.json     │◄───────┤  ├ core (main thread)      │
-│   devices · profiles · wrapper · project  │        │  hosted on GitHub Pages    │
-│   diagnostics · convert() · Engine (type) │        │                            │
+│   devices · profiles · wrapper · project  │        │  │                         │
+│   diagnostics · convert() · Engine (type) │        │  │                         │
 │ packages/engine-wasm (GPL) → lilypond-wasm│◄───────┤  └ engine: one Web Worker  │
-│ scripts/convert (dev script, not shipped) │        └────────────────────────────┘
-│ corpus/ + tests                           │
-└───────────────────────────────────────────┘
+│ scripts/convert (dev script, not shipped) │        │                            │
+│ corpus/ + tests                           │        │ hosted on GitHub Pages     │
+└───────────────────────────────────────────┘        └────────────────────────────┘
 ```
 
 ### How the app gets the core
