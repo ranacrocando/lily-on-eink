@@ -233,3 +233,18 @@ describe('convert', () => {
     expect(requests[0]!.signal).toBe(controller.signal);
   });
 });
+
+describe('convert version warnings', () => {
+  it('warns once per file of the converted project only', async () => {
+    const { engine } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'a.ly', content: String.raw`\version "2.22.0" \include "inc.ily" { c'1 }` },
+      { path: 'inc.ily', content: String.raw`\version "2.18.2"` },
+      { path: 'other/b.ily', content: String.raw`\version "2.10.0"` },
+    ];
+    const r = await convert(files, { ...sage, mainFiles: ['a.ly'] }, engine);
+    const v = r.diagnostics.filter((d) => d.message.includes('was written for LilyPond'));
+    expect(v.map((d) => d.file).sort()).toEqual(['a.ly', 'inc.ily']);
+    expect(v.every((d) => d.severity === 'warning')).toBe(true);
+  });
+});

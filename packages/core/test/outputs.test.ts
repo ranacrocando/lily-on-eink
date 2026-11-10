@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupOutputs, outputFileName } from '../src/outputs.js';
+import { groupOutputs, outputFileName, safeFileName } from '../src/outputs.js';
 
 const b = (n: number) => new Uint8Array([n]);
 
@@ -71,5 +71,20 @@ describe('outputFileName', () => {
   it('orders pages numerically', () => {
     const r = groupOutputs({ 'score-page10.png': b(10), 'score-page9.png': b(9), 'score-page2.png': b(2) });
     expect(r.books[0]!.pngPages).toEqual([b(2), b(9), b(10)]);
+  });
+});
+
+describe('safeFileName', () => {
+  it('replaces forbidden characters and trims trailing dots and spaces', () => {
+    expect(safeFileName('a/b:c?.  ')).toBe('a_b_c_');
+    expect(safeFileName('  Song. ')).toBe('Song');
+  });
+  it('falls back to score when empty', () => {
+    expect(safeFileName('')).toBe('score');
+    expect(safeFileName(' . ')).toBe('score');
+  });
+  it('caps at 150 characters', () => {
+    expect(safeFileName('x'.repeat(300))).toHaveLength(150);
+    expect(safeFileName(`${'x'.repeat(149)}.${'y'.repeat(10)}`)).toBe('x'.repeat(149));
   });
 });

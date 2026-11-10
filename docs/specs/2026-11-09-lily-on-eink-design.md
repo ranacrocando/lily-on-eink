@@ -79,10 +79,10 @@ lily-on-eink (monorepo, npm workspaces)               lily-on-eink-app (GPL)
 ┌───────────────────────────────────────────┐        ┌────────────────────────────┐
 │ packages/core (MIT)                       │        │ Static site (Vite + TS)    │
 │   ly/lily-on-eink.ily  (overlay)          │        │  ├ UI (plain DOM)          │
-│   presets/devices.json, profiles.json     │◄───────┤  ├ Web Worker → core       │
-│   devices · profiles · wrapper · project  │        │  │    + engine-wasm        │
+│   presets/devices.json, profiles.json     │◄───────┤  ├ core (main thread)      │
+│   devices · profiles · wrapper · project  │        │  │  + engine-wasm: a Web   │
 │   diagnostics · convert() · Engine (type) │        │  └ GitHub Pages            │
-│ packages/engine-wasm (GPL) → lilypond-wasm│◄───────┤                            │
+│ packages/engine-wasm (GPL) → lilypond-wasm│◄───────┤  │  Worker per compile     │
 │ scripts/convert (dev script, not shipped) │        └────────────────────────────┘
 │ corpus/ + tests                           │
 └───────────────────────────────────────────┘
@@ -381,7 +381,7 @@ A published CLI (`packages/cli`, GPL) is **not part of the MVP**. The MVP is the
 
 ## 7. Web app (`lily-on-eink-app`, M2)
 
-**Stack:** Vite, TypeScript and plain DOM, no UI framework. Compiles run in a Web Worker; cancel and timeout abort the running compile (§3).
+**Stack:** Vite, TypeScript and plain DOM, no UI framework. Core runs on the main thread; the engine runs every compile in its own Web Worker (the engine package spawns it); cancel and timeout abort the running compile (§3).
 
 ### Flow
 

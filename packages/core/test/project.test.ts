@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeProject, BUILTIN_INCLUDES, findIncludes } from '../src/project.js';
+import { analyzeProject, BUILTIN_INCLUDES, findIncludes, versionWarnings } from '../src/project.js';
 
 describe('findIncludes', () => {
   it('finds include targets', () => {
@@ -61,5 +61,25 @@ describe('analyzeProject', () => {
   it('reports includes escaping the root as missing', () => {
     const r = analyzeProject({ 'a.ly': String.raw`\include "../x.ily"` }, []);
     expect(r.missingIncludes).toEqual([{ from: 'a.ly', target: '../x.ily' }]);
+  });
+});
+
+describe('versionWarnings', () => {
+  it('warns for versions older than 2.24 and gives steps below 2.20', () => {
+    const w = versionWarnings({ 'a.ly': '2.22.1', 'b.ly': '2.18.2', 'c.ly': '2.9.5' });
+    expect(w.map((d) => d.file)).toEqual(['a.ly', 'b.ly', 'c.ly']);
+    expect(w.every((d) => d.severity === 'warning' && d.line === 0 && d.column === 0)).toBe(true);
+    expect(w[0]!.message).toBe(
+      'a.ly was written for LilyPond 2.22.1. It may need updating with convert-ly; if the result looks wrong, update the file first.',
+    );
+    expect(w[1]!.message).toContain('lilypond.org');
+    expect(w[1]!.message).toContain('convert-ly -e b.ly');
+    expect(w[2]!.message).toContain('convert-ly -e c.ly');
+  });
+  it('compares numerically and ignores current, unparseable or missing versions', () => {
+    expect(versionWarnings({ a: '2.24.0', b: '2.26.1', c: '3.0', d: 'banana', e: '', f: '2.x' })).toEqual([]);
+    expect(versionWarnings({ a: '2.9' })[0]!.message).toContain('convert-ly -e');
+    expect(versionWarnings({ a: '2.20.0' })[0]!.message).not.toContain('lilypond.org');
+    expect(versionWarnings({})).toEqual([]);
   });
 });

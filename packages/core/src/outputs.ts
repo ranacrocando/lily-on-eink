@@ -48,6 +48,14 @@ const UNSAFE = /[<>:"/\\|?*\u0000-\u001f\u007f]/g;
 const clean = (s: string) => s.replace(UNSAFE, '_');
 const trimEnd = (s: string) => s.replace(/[. ]+$/, '');
 
+/** Shortens `s` to `max` characters and drops trailing dots and spaces, which FAT32 forbids. */
+const fitName = (s: string, max: number) => trimEnd(s.slice(0, max).trimStart());
+
+/** FAT32-safe file name of at most 150 characters; "score" if nothing is left. */
+export function safeFileName(name: string): string {
+  return fitName(clean(name), MAX_NAME_LENGTH) || 'score';
+}
+
 /** Builds a FAT32-safe PDF file name of at most 150 characters. */
 export function outputFileName(
   title: string | undefined,
@@ -64,6 +72,6 @@ export function outputFileName(
   const device = clean(deviceName).slice(0, Math.max(0, MAX_NAME_LENGTH - fixed.length - ext.length - 5));
   const tail = `${fixed}${device}${ext}`;
   const room = Math.max(0, MAX_NAME_LENGTH - tail.length);
-  const head = trimEnd(base.slice(0, room).trimStart()) || 'score';
+  const head = fitName(base, room) || 'score';
   return `${head}${tail}`;
 }
