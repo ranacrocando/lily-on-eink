@@ -28,5 +28,125 @@
     "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
     "staffSizeAdjust": 0,
     "source": "https://support.remarkable.com/articles/Knowledge/About-reMarkable-2"
+  },
+  {
+    "id": "kobo-libra-2",
+    "name": "Kobo Libra 2 (2021)",
+    "widthPx": 1264,
+    "heightPx": 1680,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://blog.the-ebook-reader.com/2021/10/27/kobo-libra-2-review-the-best-kobo-ereader-yet/"
+  },
+  {
+    "id": "kobo-libra-colour",
+    "name": "Kobo Libra Colour (2024)",
+    "widthPx": 1264,
+    "heightPx": 1680,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://blog.the-ebook-reader.com/2024/04/10/new-kobo-libra-colour-now-available-to-pre-order/ (1264 x 1680, 300 ppi for black and white content)"
+  },
+  {
+    "id": "kobo-clara-2e",
+    "name": "Kobo Clara 2E (2022)",
+    "widthPx": 1072,
+    "heightPx": 1448,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": -1,
+    "source": "https://blog.the-ebook-reader.com/2022/10/10/kobo-clara-2e-review-and-video-walkthrough/"
+  },
+  {
+    "id": "kobo-elipsa-2e",
+    "name": "Kobo Elipsa 2E (2023)",
+    "widthPx": 1404,
+    "heightPx": 1872,
+    "ppi": 227,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://blog.the-ebook-reader.com/2023/05/06/kobo-elipsa-2e-review-and-video-walkthrough/"
+  },
+  {
+    "id": "kindle-paperwhite-2021",
+    "name": "Kindle Paperwhite (2021)",
+    "widthPx": 1236,
+    "heightPx": 1648,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": -1,
+    "source": "https://wiki.mobileread.com/wiki/New_Paperwhite (1648 x 1236, verified through screenshot); https://en.wikipedia.org/wiki/Amazon_Kindle (300 ppi)"
+  },
+  {
+    "id": "kindle-paperwhite-2024",
+    "name": "Kindle Paperwhite (2024)",
+    "widthPx": 1264,
+    "heightPx": 1680,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://goodereader.com/blog/?p=385656; https://duelvs.com/ereader/amazon-kindle-paperwhite-2024"
+  },
+  {
+    "id": "kindle-scribe",
+    "name": "Kindle Scribe (2022)",
+    "widthPx": 1860,
+    "heightPx": 2480,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://wiki.mobileread.com/wiki/Kindle_Scribe; https://press.aboutamazon.com/2022/9/introducing-amazon-kindle-scribe-the-first-kindle-for-reading-and-writing (300 ppi)"
+  },
+  {
+    "id": "kindle-oasis-2019",
+    "name": "Kindle Oasis (2019)",
+    "widthPx": 1264,
+    "heightPx": 1680,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://duelvs.com/ereader/amazon-kindle-oasis-2019; https://en.wikipedia.org/wiki/Amazon_Kindle"
+  },
+  {
+    "id": "pocketbook-inkpad-4",
+    "name": "PocketBook InkPad 4 (2021)",
+    "widthPx": 1404,
+    "heightPx": 1872,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://goodereader.com/blog/?p=348861; https://www.mobiflip.de/shortnews/e-book-reader-pocketbook-inkpad-4-startet-in-den-markt/amp/"
+  },
+  {
+    "id": "pocketbook-era",
+    "name": "PocketBook Era (2022)",
+    "widthPx": 1264,
+    "heightPx": 1680,
+    "ppi": 300,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://pocketbook.ch/en-ch/news/pocketbook-era-news-ch"
+  },
+  {
+    "id": "boox-note-air3",
+    "name": "Boox Note Air3 (2023)",
+    "widthPx": 1404,
+    "heightPx": 1872,
+    "ppi": 227,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://blog.the-ebook-reader.com/2023/12/12/new-10-3-boox-note-air3-released-with-very-few-upgrades/"
+  },
+  {
+    "id": "remarkable-paper-pro",
+    "name": "reMarkable Paper Pro (2024)",
+    "widthPx": 1620,
+    "heightPx": 2160,
+    "ppi": 229,
+    "safeAreaMm": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+    "staffSizeAdjust": 0,
+    "source": "https://remarkable.com/products/remarkable-paper/pro/details/features"
   }
 ]
