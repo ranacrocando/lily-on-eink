@@ -135,6 +135,9 @@ const CASES = [
   { name: 'reger', dir: 'organ/reger-lobe-den-herren', profile: 'organ' },
   { name: 'bass-etude', dir: 'bass/bass-etude-e-minor', profile: 'tab' },
   { name: 'leise-rieselt', dir: 'leadsheet/leise-rieselt-der-schnee', profile: 'leadsheet' },
+  { name: 'piano-ode', dir: 'piano/ode-to-joy-arrangement', profile: 'piano' },
+  { name: 'ukulele-susanna', dir: 'ukulele/oh-susanna', profile: 'tab' },
+  { name: 'accordion-entchen', dir: 'accordion/alle-meine-entchen', profile: 'accordion' },
 ] as const;
 
 let engine: Engine;
@@ -188,7 +191,10 @@ describe('corpus on kobo-sage', () => {
     for (const page of pngPages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
   };
 
-  it.each([CASES[0], CASES[1]])('$name draws nothing within 1.5 mm of the page edge', expectBandWhite);
+  it.each([CASES[0], CASES[1], CASES[3], CASES[4], CASES[5]])(
+    '$name draws nothing within 1.5 mm of the page edge',
+    expectBandWhite,
+  );
 
   // KNOWN FAILURE, deferred to the hardening plan (markup scaling outside the titles):
   // leise-rieselt's two-column verse markup is wider than the line, right edge.
