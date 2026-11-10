@@ -191,8 +191,8 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
     placedBy.set(m.from, placedBy.get(m.from) ?? m.includedBy);
     placedBy.set(m.to, m.includedBy);
   }
-  texts = applyMoves(texts, plan.moves, plan.keptAtTop);
-  engineFiles = applyMoves(engineFiles, plan.moves, plan.keptAtTop);
+  texts = applyMoves(texts, plan);
+  engineFiles = applyMoves(engineFiles, plan);
   for (const group of byFrom.values()) {
     const first = group[0];
     if (!first) continue;
@@ -215,15 +215,6 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
       severity: 'warning',
       message:
         'The include structure could not be sorted out automatically. Upload the whole project folder so the folder structure is kept.',
-    });
-  }
-  for (const a of plan.ambiguous) {
-    diagnostics.push({
-      file: a.includedBy,
-      line: 0,
-      column: 0,
-      severity: 'warning',
-      message: `Several uploaded files are called ${baseOf(a.target)}, so it is unclear which one ${a.includedBy} means by ${a.target}. Upload the whole project folder so the folder structure is kept.`,
     });
   }
 

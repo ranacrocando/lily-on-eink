@@ -103,7 +103,7 @@ describe('versionWarnings', () => {
 describe('placeIncludes', () => {
   const inc = (...t: string[]) => t.map((x) => String.raw`\include "${x}"`).join('\n');
   const mv = (from: string, to: string, includedBy: string, line = 1) => ({ from, to, includedBy, line });
-  const none = { moves: [], ambiguous: [], keptAtTop: [], gaveUp: false };
+  const none = { moves: [], keptAtTop: [], gaveUp: false };
 
   it('moves a flat-uploaded file into the subfolder its includer expects', () => {
     const r = placeIncludes({ 'main.ly': inc('parts/voice.ily'), 'voice.ily': '' });
@@ -126,7 +126,7 @@ describe('placeIncludes', () => {
       mv('notes.ily', 'parts/notes.ily', 'parts/voice.ily', 1),
       mv('defs.ily', 'common/defs.ily', 'parts/voice.ily', 2),
     ]);
-    const placed = applyMoves(texts, r.moves, r.keptAtTop);
+    const placed = applyMoves(texts, r);
     expect(Object.keys(placed).sort()).toEqual(['common/defs.ily', 'main.ly', 'parts/notes.ily', 'parts/voice.ily']);
     expect(analyzeProject(placed).missingIncludes).toEqual([]);
   });
@@ -138,12 +138,7 @@ describe('placeIncludes', () => {
     const texts = { 'main.ly': inc('q/A.ily'), 'A.ily': inc('B.ily'), 'B.ily': inc('p/C.ily'), 'C.ily': '' };
     const r = placeIncludes(texts);
     expect(r.moves.map((m) => m.to)).toEqual(['q/A.ily', 'q/B.ily', 'q/p/C.ily']);
-    expect(Object.keys(applyMoves(texts, r.moves, r.keptAtTop)).sort()).toEqual([
-      'main.ly',
-      'q/A.ily',
-      'q/B.ily',
-      'q/p/C.ily',
-    ]);
+    expect(Object.keys(applyMoves(texts, r)).sort()).toEqual(['main.ly', 'q/A.ily', 'q/B.ily', 'q/p/C.ily']);
   });
   it('gives up in bounded time on a self-include under a placed folder', () => {
     const r = placeIncludes({ 'main.ly': inc('q/A.ily'), 'A.ily': inc('x/A.ily') });
@@ -171,7 +166,7 @@ describe('placeIncludes', () => {
     const texts = { 'main.ly': inc('a/v.ily', 'b/v.ily'), 'v.ily': '' };
     const r = placeIncludes(texts);
     expect(r.moves).toEqual([mv('v.ily', 'a/v.ily', 'main.ly'), mv('v.ily', 'b/v.ily', 'main.ly', 2)]);
-    expect(Object.keys(applyMoves(texts, r.moves, r.keptAtTop)).sort()).toEqual(['a/v.ily', 'b/v.ily', 'main.ly']);
+    expect(Object.keys(applyMoves(texts, r)).sort()).toEqual(['a/v.ily', 'b/v.ily', 'main.ly']);
   });
   it('keeps a file at the top when an include finds it there, and copies it for a placed includer', () => {
     const texts = {
@@ -185,12 +180,26 @@ describe('placeIncludes', () => {
       mv('voice.ily', 'parts/voice.ily', 'main.ly', 2),
       mv('notes.ily', 'parts/notes.ily', 'parts/voice.ily'),
     ]);
-    expect(Object.keys(applyMoves(texts, r.moves, r.keptAtTop)).sort()).toEqual([
+    expect(Object.keys(applyMoves(texts, r)).sort()).toEqual([
       'main.ly',
       'notes.ily',
       'parts/notes.ily',
       'parts/voice.ily',
     ]);
+  });
+  it('gives up on a mutual include that keeps growing deeper under a placed folder', () => {
+    const r = placeIncludes({ 'main.ly': inc('q/A.ily'), 'A.ily': inc('x/B.ily'), 'B.ily': inc('x/A.ily') });
+    expect(r).toEqual({ ...none, gaveUp: true });
+  });
+  it('handles many song folders sharing top-level files without giving up', () => {
+    const texts: Record<string, string> = {};
+    const shared = ['a', 'b', 'c', 'd', 'e'].map((n) => `${n}.ily`);
+    for (const f of shared) texts[f] = '';
+    for (let i = 0; i < 20; i++) texts[`songs/s${i}/main.ly`] = inc(...shared);
+    const r = placeIncludes(texts);
+    expect(r.gaveUp).toBe(false);
+    expect(r.moves).toHaveLength(100);
+    expect(analyzeProject(applyMoves(texts, r), []).missingIncludes).toEqual([]);
   });
   it('never overwrites an uploaded path', () => {
     const r = placeIncludes({ 'main.ly': inc('parts/voice.ily'), 'parts/voice.ily': 'a', 'voice.ily': 'b' });
@@ -204,6 +213,6 @@ describe('placeIncludes', () => {
     const texts = { 'main.ly': inc('parts/voice.ly'), 'voice.ly': '' };
     expect(analyzeProject(texts).mainFiles).toEqual(['main.ly', 'voice.ly']);
     const r = placeIncludes(texts);
-    expect(analyzeProject(applyMoves(texts, r.moves, r.keptAtTop)).mainFiles).toEqual(['main.ly']);
+    expect(analyzeProject(applyMoves(texts, r)).mainFiles).toEqual(['main.ly']);
   });
 });

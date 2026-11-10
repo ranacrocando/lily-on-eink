@@ -150,18 +150,8 @@ export interface IncludeMove {
   line: number;
 }
 
-export interface AmbiguousInclude {
-  /** Path the include expects (the first one, if the name is wanted at several paths). */
-  target: string;
-  /** Including file, at its final location. */
-  includedBy: string;
-  /** Uploaded files with the same basename. */
-  candidates: string[];
-}
-
 export interface PlacementPlan {
   moves: IncludeMove[];
-  ambiguous: AmbiguousInclude[];
   /** Top-level files that an include also finds at the top level: `applyMoves` keeps them there. */
   keptAtTop: string[];
   /** The include structure could not be sorted out within the bound; `moves` is then empty. */
@@ -172,16 +162,18 @@ const baseName = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 
 /**
  * Decides where flat-uploaded include files belong (the web "Choose files" picker gives bare names).
- * Pure: the caller applies the result with `applyMoves(files, moves, keptAtTop)`.
+ * Pure: the caller applies the result with `applyMoves(files, plan)`.
  *
  * Movable files are top-level files (no `/`) whose basename some include target names; everything
- * else is fixed and never moves, so folder uploads are untouched. Starting from the fixed files, each
+ * else is fixed: files inside folders never move. (Top-level files of a folder upload may still be
+ * placed where subfolder files include them.) Starting from the fixed files, each
  * include is followed from the file's placed path: an include that resolves to a placed file or to a
  * movable file's own top-level path is in order (the latter keeps that file at the top); otherwise
  * the movable file with the target's basename is placed (copied) at the expected path, and its own
  * includes are then followed from there. A file wanted at several paths is copied to each. Each
- * (file, path) pair is processed once, and placements are bounded (4 x number of files); beyond that
- * nothing moves and `gaveUp` is set. Never overwrites an uploaded path; deterministic order.
+ * (file, path) pair is processed once. If a file would be placed below a folder that already holds
+ * a placement of the same file (an include cycle growing deeper), or placements exceed a safety cap
+ * (50 x number of files), nothing moves and `gaveUp` is set. Never overwrites an uploaded path; deterministic order.
  */
 export function placeIncludes(
   texts: Record<string, string>,
@@ -212,10 +204,10 @@ export function placeIncludes(
     enqueue(p, p);
   }
 
-  const bound = 4 * paths.length;
+  const cap = 50 * paths.length;
+  const dirsOf = new Map<string, string[]>(); // file -> folders it was placed in
   const moves: IncludeMove[] = [];
   const keptAtTop = new Set<string>();
-  const ambiguous: AmbiguousInclude[] = [];
   // The queue grows while iterating; for-of visits appended entries.
   for (const [file, at] of queue) {
     for (const target of includesOf(file)) {
@@ -230,39 +222,37 @@ export function placeIncludes(
         placed.set(r, r);
         enqueue(r, r);
       } else {
-        const candidates = [...movable].filter((m) => m === baseName(r));
-        const only = candidates[0];
-        if (candidates.length === 1 && only !== undefined && !(r in texts)) {
+        const only = movable.has(baseName(r)) ? baseName(r) : undefined;
+        if (only !== undefined && !(r in texts)) {
+          const dir = r.slice(0, r.lastIndexOf('/'));
+          const dirs = dirsOf.get(only) ?? [];
+          if (moves.length >= cap || dirs.some((d) => r.startsWith(`${d}/`))) {
+            return { moves: [], keptAtTop: [], gaveUp: true };
+          }
+          dirsOf.set(only, [...dirs, dir]);
           placed.set(r, only);
           moves.push({ from: only, to: r, includedBy: at, line: includeLine(texts[file] ?? '', target) });
-          if (moves.length > bound) return { moves: [], ambiguous, keptAtTop: [], gaveUp: true };
           enqueue(only, r);
-        } else if (candidates.length > 1 && !ambiguous.some((a) => baseName(a.target) === baseName(r))) {
-          ambiguous.push({ target: r, includedBy: at, candidates });
         }
       }
     }
   }
-  return { moves, ambiguous, keptAtTop: [...keptAtTop].sort(), gaveUp: false };
+  return { moves, keptAtTop: [...keptAtTop].sort(), gaveUp: false };
 }
 
 /**
- * Applies `placeIncludes` moves to any path-keyed map (texts, bytes, ...). Returns a new object.
+ * Applies a `placeIncludes` plan to any path-keyed map (texts, bytes, ...). Returns a new object.
  * A file with several moves is copied to every target and removed from its old path, unless
- * that path is in `keptAtTop`.
+ * an include also finds it at the top level (`plan.keptAtTop`).
  */
-export function applyMoves<T>(
-  files: Record<string, T>,
-  moves: readonly { from: string; to: string }[],
-  keptAtTop: readonly string[] = [],
-): Record<string, T> {
+export function applyMoves<T>(files: Record<string, T>, plan: PlacementPlan): Record<string, T> {
   const targets = new Map<string, string[]>();
-  for (const m of moves) targets.set(m.from, [...(targets.get(m.from) ?? []), m.to]);
+  for (const m of plan.moves) targets.set(m.from, [...(targets.get(m.from) ?? []), m.to]);
   const out: Record<string, T> = {};
   for (const [path, value] of Object.entries(files)) {
     const to = targets.get(path);
     if (to) for (const t of to) out[t] = value;
-    if (!to || keptAtTop.includes(path)) out[path] = value;
+    if (!to || plan.keptAtTop.includes(path)) out[path] = value;
   }
   return out;
 }
