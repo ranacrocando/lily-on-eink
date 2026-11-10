@@ -152,13 +152,13 @@ export function versionWarnings(versions: Record<string, string>): Diagnostic[] 
     let message: string;
     if (olderThan(v, 2, 20)) {
       message =
-        `${file} was written for LilyPond ${shown}, which is very old, and will probably not work as it is. ` +
-        `To update it: 1. Install LilyPond from lilypond.org. ` +
-        `2. Run \`convert-ly -e ${file}\`. 3. Upload the file again.`;
+        `${file} was written for a very old LilyPond (${shown}) and will probably not work as it is. ` +
+        `To update it to the current LilyPond format: 1. Install LilyPond from lilypond.org (it includes the convert-ly tool). ` +
+        `2. Run \`convert-ly -e "${file}"\` (this changes the file; keep a copy). 3. Upload the file again.`;
     } else if (olderThan(v, 2, 24)) {
       message =
-        `${file} was written for LilyPond ${shown}. It may need updating with convert-ly; ` +
-        `if the result looks wrong, update the file first.`;
+        `${file} was written for an older LilyPond (${shown}). It may still work. If the result looks wrong, ` +
+        `the file may need to be updated to the current LilyPond format with the convert-ly tool (it comes with LilyPond).`;
     } else continue;
     out.push({ file, line: 0, column: 0, severity: 'warning', message });
   }

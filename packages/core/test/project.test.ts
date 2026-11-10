@@ -65,21 +65,30 @@ describe('analyzeProject', () => {
 });
 
 describe('versionWarnings', () => {
-  it('warns for versions older than 2.24 and gives steps below 2.20', () => {
+  it('gives the weak message for 2.20 to 2.23 and the step-by-step message below 2.20', () => {
     const w = versionWarnings({ 'a.ly': '2.22.1', 'b.ly': '2.18.2', 'c.ly': '2.9.5' });
     expect(w.map((d) => d.file)).toEqual(['a.ly', 'b.ly', 'c.ly']);
     expect(w.every((d) => d.severity === 'warning' && d.line === 0 && d.column === 0)).toBe(true);
     expect(w[0]!.message).toBe(
-      'a.ly was written for LilyPond 2.22.1. It may need updating with convert-ly; if the result looks wrong, update the file first.',
+      'a.ly was written for an older LilyPond (2.22.1). It may still work. If the result looks wrong, the file may need to be updated to the current LilyPond format with the convert-ly tool (it comes with LilyPond).',
     );
     expect(w[1]!.message).toContain('lilypond.org');
-    expect(w[1]!.message).toContain('convert-ly -e b.ly');
-    expect(w[2]!.message).toContain('convert-ly -e c.ly');
+    expect(w[1]!.message).toContain('convert-ly -e "b.ly"');
+    expect(w[1]!.message).toContain('keep a copy');
+    expect(w[2]!.message).toContain('convert-ly -e "c.ly"');
   });
-  it('compares numerically and ignores current, unparseable or missing versions', () => {
-    expect(versionWarnings({ a: '2.24.0', b: '2.26.1', c: '3.0', d: 'banana', e: '', f: '2.x' })).toEqual([]);
-    expect(versionWarnings({ a: '2.9' })[0]!.message).toContain('convert-ly -e');
-    expect(versionWarnings({ a: '2.20.0' })[0]!.message).not.toContain('lilypond.org');
+  it('handles the boundaries numerically', () => {
+    const strong = (v: string) => versionWarnings({ a: v })[0]?.message.includes('lilypond.org');
+    expect(strong('2.19.99')).toBe(true);
+    expect(strong('2.20.0')).toBe(false);
+    expect(strong('2.23.5')).toBe(false);
+    expect(versionWarnings({ a: '2.23.5' })).toHaveLength(1);
+    expect(strong('2.9')).toBe(true);
+    expect(versionWarnings({ a: '2.24.0', b: '2.25.80', c: '3.0.0', d: '2.26.1' })).toEqual([]);
+  });
+  it('shows the trimmed version and ignores unparseable or empty ones', () => {
+    expect(versionWarnings({ a: ' 2.22.0 ' })[0]!.message).toContain('(2.22.0)');
+    expect(versionWarnings({ a: 'banana', b: '', c: '2.x' })).toEqual([]);
     expect(versionWarnings({})).toEqual([]);
   });
 });
