@@ -66,7 +66,7 @@ The convert script takes files or folders, plus `--device`, `--profile`, `--out`
 2. On GitHub, create a release (Releases, Draft a new release) with a new tag `vX.Y.Z` on `main`, and publish it. A tag alone builds nothing.
 3. The Release workflow checks that the tag equals all three versions, runs the tests, smoke-installs the tarballs and uploads them to the release. Assets that already exist are kept, because the app lockfile pins their hashes. To re-run for an existing release, start the workflow by hand with the tag; `force` replaces existing assets.
 
-If the version check fails, delete the release and the tag, fix the versions via a PR, and release again. Do not enable GitHub's "immutable releases": it blocks the upload after publishing. To test the tarballs locally: `npm pack -w packages/core -w packages/engine-wasm --pack-destination out`, then `node scripts/smoke-install.mjs out`.
+If the version check fails, delete the release and the tag, fix the versions via a PR, and release again. Do not enable GitHub's "immutable releases": it blocks the upload after publishing. To test the tarballs locally, first delete `packages/*/dist` and `*.tsbuildinfo` (stale source maps would end up in the tarballs), then run `npm run build` and `npm pack -w packages/core -w packages/engine-wasm --pack-destination out`, then `node scripts/smoke-install.mjs out`.
 
 ## License
 

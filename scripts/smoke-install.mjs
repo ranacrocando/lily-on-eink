@@ -1,15 +1,15 @@
-// Smoke test for the release tarballs: installs them into a clean temporary project, the way the
-// app does (including the `overrides` entry), and converts one corpus file.
-// Usage: node scripts/smoke-install.mjs <dir with the two .tgz files> [workdir]
-// The work directory defaults to a fresh temp directory (removed afterwards).
+// Smoke test for the release tarballs: installs them into a clean temporary project (with the
+// app's `overrides` entry) and converts one corpus file.
+// Usage: node scripts/smoke-install.mjs <dir with the two .tgz files>
+// Works in a fresh temp directory, which is removed afterwards.
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 
-const [tarDir, workArg] = process.argv.slice(2);
+const [tarDir] = process.argv.slice(2);
 if (!tarDir) {
-  console.error('usage: node scripts/smoke-install.mjs <tarball-dir> [workdir]');
+  console.error('usage: node scripts/smoke-install.mjs <tarball-dir>');
   process.exit(2);
 }
 const repo = resolve(import.meta.dirname, '..');
@@ -21,9 +21,7 @@ const find = (prefix) => {
 const core = find('lily-on-eink-core-');
 const engine = find('lily-on-eink-engine-wasm-');
 
-const work = workArg ? resolve(workArg) : mkdtempSync(join(tmpdir(), 'lily-smoke-'));
-rmSync(work, { recursive: true, force: true });
-mkdirSync(work, { recursive: true });
+const work = mkdtempSync(join(tmpdir(), 'lily-smoke-'));
 
 const toFileDep = (p) => `file:${p.split(sep).join('/')}`;
 writeFileSync(
@@ -36,7 +34,8 @@ writeFileSync(
         '@lily-on-eink/core': toFileDep(core),
         '@lily-on-eink/engine-wasm': toFileDep(engine),
       },
-      // Same entry as the app: engine-wasm depends on core, which is not on the registry.
+      // The app has the same entry. Here it is only a safety net: the root's core tarball already
+      // satisfies engine-wasm's exact dependency.
       overrides: { '@lily-on-eink/core': '$@lily-on-eink/core' },
     },
     null,
@@ -50,6 +49,19 @@ const run = (cmd, args, cwd) => {
 };
 try {
   run('npm', ['install', '--no-audit', '--no-fund', '--ignore-scripts'], work);
+
+  // Both packages must come from the tarballs, and engine-wasm must not get its own copy of core.
+  const packages = JSON.parse(readFileSync(join(work, 'package-lock.json'), 'utf8')).packages;
+  for (const [name, tarball] of [
+    ['core', core],
+    ['engine-wasm', engine],
+  ]) {
+    const entry = packages[`node_modules/@lily-on-eink/${name}`];
+    if (!entry?.resolved?.startsWith('file:') || !entry.resolved.endsWith(basename(tarball)))
+      throw new Error(`@lily-on-eink/${name} does not resolve to ${basename(tarball)}: ${entry?.resolved}`);
+  }
+  const nested = 'node_modules/@lily-on-eink/engine-wasm/node_modules/@lily-on-eink/core';
+  if (packages[nested]) throw new Error(`unexpected nested copy of core: ${nested}`);
 
   const corpusFile = resolve(repo, 'corpus/accordion/alle-meine-entchen/alle-meine-entchen.ly');
   writeFileSync(
@@ -81,5 +93,5 @@ try {
   );
   run('node', ['smoke.mjs'], work);
 } finally {
-  if (!workArg) rmSync(work, { recursive: true, force: true });
+  rmSync(work, { recursive: true, force: true });
 }
