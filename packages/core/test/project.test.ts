@@ -102,15 +102,17 @@ describe('versionWarnings', () => {
 
 describe('placeIncludes', () => {
   const inc = (...t: string[]) => t.map((x) => String.raw`\include "${x}"`).join('\n');
+  const mv = (from: string, to: string, includedBy: string, line = 1) => ({ from, to, includedBy, line });
 
   it('moves a flat-uploaded file into the subfolder its includer expects', () => {
     const r = placeIncludes({ 'main.ly': inc('parts/voice.ily'), 'voice.ily': '' });
-    expect(r).toEqual({
-      moves: [{ from: 'voice.ily', to: 'parts/voice.ily', includedBy: 'main.ly' }],
-      ambiguous: [],
-    });
+    expect(r).toEqual({ moves: [mv('voice.ily', 'parts/voice.ily', 'main.ly')], ambiguous: [] });
   });
-  it('resolves nested includes relative to the new location (fixpoint)', () => {
+  it('reports the line of the include', () => {
+    const r = placeIncludes({ 'main.ly': `\\version "2.24.0"\n${inc('parts/voice.ily')}`, 'voice.ily': '' });
+    expect(r.moves[0]?.line).toBe(2);
+  });
+  it('resolves nested includes relative to the new location', () => {
     const texts = {
       'main.ly': inc('parts/voice.ily'),
       'voice.ily': inc('notes.ily', '../common/defs.ily'),
@@ -119,32 +121,56 @@ describe('placeIncludes', () => {
     };
     const r = placeIncludes(texts);
     expect(r.moves).toEqual([
-      { from: 'voice.ily', to: 'parts/voice.ily', includedBy: 'main.ly' },
-      { from: 'defs.ily', to: 'common/defs.ily', includedBy: 'parts/voice.ily' },
-      { from: 'notes.ily', to: 'parts/notes.ily', includedBy: 'parts/voice.ily' },
+      mv('voice.ily', 'parts/voice.ily', 'main.ly'),
+      mv('defs.ily', 'common/defs.ily', 'parts/voice.ily', 2),
+      mv('notes.ily', 'parts/notes.ily', 'parts/voice.ily', 1),
     ]);
     const placed = applyMoves(texts, r.moves);
     expect(Object.keys(placed).sort()).toEqual(['common/defs.ily', 'main.ly', 'parts/notes.ily', 'parts/voice.ily']);
     expect(analyzeProject(placed).missingIncludes).toEqual([]);
   });
-  it('reports several same-named candidates as ambiguous and moves nothing', () => {
+  it('moves a chain exactly once per file, following the new location', () => {
+    const r = placeIncludes({ 'main.ly': inc('q/A.ily'), 'A.ily': inc('p/B.ily'), 'B.ily': '' });
+    expect(r.moves).toEqual([mv('A.ily', 'q/A.ily', 'main.ly'), mv('B.ily', 'q/p/B.ily', 'q/A.ily')]);
+  });
+  it('moves nothing for a mutual cycle without a settled entry point', () => {
+    const r = placeIncludes({ 'A.ily': inc('x/B.ily'), 'B.ily': inc('y/A.ily') });
+    expect(r).toEqual({ moves: [], ambiguous: [] });
+  });
+  it('only moves top-level files', () => {
+    const r = placeIncludes({ 'main.ly': inc('parts/voice.ily'), 'old/voice.ily': '' });
+    expect(r).toEqual({ moves: [], ambiguous: [] });
+  });
+  it('copies one file to every path that wants it', () => {
+    const texts = { 'main.ly': inc('a/v.ily', 'b/v.ily'), 'v.ily': '' };
+    const r = placeIncludes(texts);
+    expect(r).toEqual({
+      moves: [mv('v.ily', 'a/v.ily', 'main.ly'), mv('v.ily', 'b/v.ily', 'main.ly', 2)],
+      ambiguous: [],
+    });
+    expect(Object.keys(applyMoves(texts, r.moves)).sort()).toEqual(['a/v.ily', 'b/v.ily', 'main.ly']);
+  });
+  it('reports several uploaded files of that name as ambiguous and moves nothing', () => {
     const r = placeIncludes({ 'main.ly': inc('parts/voice.ily'), 'voice.ily': '', 'x/voice.ily': '' });
     expect(r.moves).toEqual([]);
     expect(r.ambiguous).toEqual([
       { target: 'parts/voice.ily', includedBy: 'main.ly', candidates: ['voice.ily', 'x/voice.ily'] },
     ]);
   });
-  it('does not move a file that is also the only candidate for two different targets', () => {
-    const r = placeIncludes({ 'main.ly': inc('a/v.ily', 'b/v.ily'), 'v.ily': '' });
-    expect(r.moves).toEqual([]);
-    expect(r.ambiguous).toHaveLength(2);
-  });
   it('does not steal a file another include already finds, and never overwrites', () => {
     const r = placeIncludes({ 'main.ly': inc('voice.ily', 'parts/voice.ily'), 'voice.ily': '' });
     expect(r.moves).toEqual([]);
-    expect(r.ambiguous).toEqual([]);
     const r2 = placeIncludes({ 'main.ly': inc('parts/voice.ily'), 'parts/voice.ily': 'a', 'voice.ily': 'b' });
     expect(r2.moves).toEqual([]);
+  });
+  it('moves a file even if its old location was found by a not yet placed include, and copies it again', () => {
+    // A.ily finds C.ily at the top while unsettled; once A moves to q/, C.ily is needed there too.
+    const r = placeIncludes({ 'main.ly': inc('q/A.ily', 'lib/C.ily'), 'A.ily': inc('C.ily'), 'C.ily': '' });
+    expect(r.moves).toEqual([
+      mv('A.ily', 'q/A.ily', 'main.ly'),
+      mv('C.ily', 'lib/C.ily', 'main.ly', 2),
+      mv('C.ily', 'q/C.ily', 'q/A.ily'),
+    ]);
   });
   it('leaves includes without any candidate alone and ignores builtins', () => {
     const r = placeIncludes({ 'main.ly': inc('english.ly', 'lib/none.ily'), 'english.ly': '' });
@@ -156,9 +182,5 @@ describe('placeIncludes', () => {
     expect(analyzeProject(texts).mainFiles).toEqual(['main.ly', 'voice.ly']);
     const placed = applyMoves(texts, placeIncludes(texts).moves);
     expect(analyzeProject(placed).mainFiles).toEqual(['main.ly']);
-  });
-  it('terminates on include cycles', () => {
-    const r = placeIncludes({ 'a.ly': inc('d/b.ily'), 'b.ily': inc('../a.ily') });
-    expect(r.moves).toEqual([{ from: 'b.ily', to: 'd/b.ily', includedBy: 'a.ly' }]);
   });
 });

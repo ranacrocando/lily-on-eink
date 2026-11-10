@@ -344,7 +344,7 @@ A failed main file produces diagnostics, and the others still convert.
 
 - **Include graph:** parse `\include "…"` statements, ignoring comments and strings. Resolve paths relative to the including file, then the include paths.
 - **Main files:** `.ly` files that no other uploaded file includes. `.ily` files are never main files. `mainFiles` overrides the detection.
-- **Flat uploads:** the web file picker yields bare names. Before analysis, an unresolved include is satisfied by moving the one uploaded file with that basename to the expected path (never overwriting, never taking a file another include already finds; repeated until stable). Several candidates: warning, no move. Paths in the result are the placed paths.
+- **Flat uploads:** the web file picker yields bare names. Before analysis, an unresolved include is satisfied by moving the one uploaded file with that basename to the expected path (never overwriting, never taking a file another include already finds; repeated until stable). Only top-level files move, so folder uploads are untouched. A file wanted at several paths is copied to each. Several uploaded files with that name: warning, no move. Paths in the result are the placed paths.
 - **Missing includes** are reported before compiling.
   - Exception: names that exist in the engine's own `ly/` directory (e.g. `english.ly`, `predefined-ukulele-fretboards.ly`) are not missing. The engine provides that list.
 - **Version check** reads `\version`:

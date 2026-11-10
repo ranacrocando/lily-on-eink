@@ -3,7 +3,15 @@ import { normalizeLog, parseDiagnostics, type Diagnostic } from './diagnostics.j
 import type { Engine, EngineFormat, EngineRequest, EngineResult } from './engine.js';
 import { groupOutputs, outputFileName } from './outputs.js';
 import { effectiveMarginsMm, effectiveStaffSize, getProfile } from './profiles.js';
-import { analyzeProject, applyMoves, findIncludes, placeIncludes, resolveInclude, versionWarnings } from './project.js';
+import {
+  analyzeProject,
+  applyMoves,
+  findIncludes,
+  includeLine,
+  placeIncludes,
+  resolveInclude,
+  versionWarnings,
+} from './project.js';
 import { buildWrapper } from './wrapper.js';
 
 /** A project file. `path` is relative and POSIX-style, e.g. `songs/a.ly`. */
@@ -30,7 +38,7 @@ export interface ConvertOptions {
   keepTagline?: boolean;
   /** Default ['pdf']. PNG pages are rendered at the device ppi. */
   outputs?: EngineFormat[];
-  /** Overrides main-file detection. */
+  /** Overrides main-file detection. Accepts uploaded or placed paths; results use placed paths. */
   mainFiles?: string[];
   signal?: AbortSignal;
   /** Per main file. Default 60000. */
@@ -71,13 +79,6 @@ function textOf(content: Uint8Array | string): string {
 
 function error(file: string, message: string, line = 0): Diagnostic {
   return { file, line, column: 0, severity: 'error', message };
-}
-
-/** Line (1-based) of `\include "target"` in source, or 0 if not found. */
-function includeLine(source: string, target: string): number {
-  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = new RegExp(String.raw`\\include\s*"${escaped}"`).exec(source);
-  return m ? source.slice(0, m.index).split('\n').length : 0;
 }
 
 /** Reads a LilyPond string literal starting at the opening quote; returns [value, indexAfter]. */
@@ -177,18 +178,28 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
   // Flat uploads (bare file names): move include files to where they are included from.
   // All paths below (main files, outputs, diagnostics, logs) are the placed paths.
   const plan = placeIncludes(texts);
-  const moved = new Map(plan.moves.map((m) => [m.from, m.to]));
+  // A file wanted at several paths is copied to each; one info per file lists them all.
+  const placedBy = new Map<string, string>(); // uploaded or placed path -> first includer
+  const byFrom = new Map<string, typeof plan.moves>();
+  for (const m of plan.moves) {
+    byFrom.set(m.from, [...(byFrom.get(m.from) ?? []), m]);
+    placedBy.set(m.from, placedBy.get(m.from) ?? m.includedBy);
+    placedBy.set(m.to, m.includedBy);
+  }
   texts = applyMoves(texts, plan.moves);
   engineFiles = applyMoves(engineFiles, plan.moves);
-  for (const m of plan.moves) {
-    const to = dirOf(m.to);
-    const where = to ? `${to}/` : 'the top folder';
+  for (const group of byFrom.values()) {
+    const first = group[0];
+    if (!first) continue;
+    const where = group.map((m) => (dirOf(m.to) ? `${dirOf(m.to)}/` : 'the top folder')).join(' and ');
+    const includers = [...new Set(group.map((m) => m.includedBy))];
+    const who = includers.length === 1 ? `${includers[0]} includes` : `${includers.join(', ')} include`;
     diagnostics.push({
-      file: m.includedBy,
-      line: 0,
+      file: first.includedBy,
+      line: first.line,
       column: 0,
       severity: 'info',
-      message: `${baseOf(m.to)} was placed in ${where} because ${m.includedBy} includes it from there.`,
+      message: `${baseOf(first.to)} was placed in ${where} because ${who} it from there.`,
     });
   }
   for (const a of plan.ambiguous) {
@@ -197,7 +208,7 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
       line: 0,
       column: 0,
       severity: 'warning',
-      message: `Several uploaded files are called ${baseOf(a.target)}; ${a.includedBy} includes ${a.target}. Upload the whole folder instead (Choose a folder) so the right one is used.`,
+      message: `Several uploaded files are called ${baseOf(a.target)}, so it is unclear which one ${a.includedBy} means by ${a.target}. Upload the whole project folder so the folder structure is kept.`,
     });
   }
 
@@ -208,7 +219,21 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
   const brokenFiles = new Set(analysis.missingIncludes.map((m) => m.from));
 
   const mainFiles: string[] = [];
-  for (const main of options.mainFiles?.map((m) => moved.get(m) ?? m) ?? analysis.mainFiles) {
+  const requested = (options.mainFiles ?? analysis.mainFiles).flatMap((m) => {
+    const by = placedBy.get(m);
+    if (options.mainFiles && by !== undefined) {
+      diagnostics.push({
+        file: m,
+        line: 0,
+        column: 0,
+        severity: 'info',
+        message: `${m} is included by ${by}, so it is not converted on its own.`,
+      });
+      return [];
+    }
+    return [m];
+  });
+  for (const main of requested) {
     if (!(main in texts)) diagnostics.push(error(main, 'main file is not part of the project'));
     else if (![...reachable(main, texts)].some((p) => brokenFiles.has(p))) mainFiles.push(main);
   }

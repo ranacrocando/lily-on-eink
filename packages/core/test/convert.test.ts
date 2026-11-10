@@ -290,19 +290,31 @@ describe('convert version warnings', () => {
 
   it('places flat-uploaded include files, reports info and uses the moved path', async () => {
     const { engine, requests } = fakeEngine();
+    const bytes = new Uint8Array([9]);
     const files: ProjectFile[] = [
       { path: 'main.ly', content: String.raw`\include "parts/voice.ly" { c'1 }` },
       { path: 'voice.ly', content: 'x = 1' },
+      { path: 'a.ly', content: String.raw`\include "img/f.ily"` },
+      { path: 'f.ily', content: bytes },
     ];
     const result = await convert(files, sage, engine);
-    expect(requests).toHaveLength(1);
-    expect(requests[0]!.files['parts/voice.ly']).toBe('x = 1');
-    expect(requests[0]!.files).not.toHaveProperty('voice.ly');
-    expect(result.outputs.map((o) => o.mainFile)).toEqual(['main.ly']);
-    expect(result.diagnostics).toEqual([
+    expect(requests).toHaveLength(2);
+    const byMain = (name: string) => requests.find((r) => r.source.includes(`"${name}"`))!;
+    expect(byMain('main.ly').files['parts/voice.ly']).toBe('x = 1');
+    expect(byMain('main.ly').files).not.toHaveProperty('voice.ly');
+    expect(byMain('a.ly').files['img/f.ily']).toBe(bytes);
+    expect(result.outputs.map((o) => o.mainFile).sort()).toEqual(['a.ly', 'main.ly']);
+    expect(result.diagnostics.filter((d) => d.severity === 'info')).toEqual([
+      {
+        file: 'a.ly',
+        line: 1,
+        column: 0,
+        severity: 'info',
+        message: 'f.ily was placed in img/ because a.ly includes it from there.',
+      },
       {
         file: 'main.ly',
-        line: 0,
+        line: 1,
         column: 0,
         severity: 'info',
         message: 'voice.ly was placed in parts/ because main.ly includes it from there.',
@@ -310,17 +322,47 @@ describe('convert version warnings', () => {
     ]);
   });
 
-  it('warns about ambiguous flat uploads', async () => {
-    const { engine } = fakeEngine();
+  it('lists every folder a copied file was placed in', async () => {
+    const { engine, requests } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'main.ly', content: String.raw`\include "a/v.ily" \include "b/v.ily"` },
+      { path: 'v.ily', content: '' },
+    ];
+    const result = await convert(files, sage, engine);
+    expect(Object.keys(requests[0]!.files)).toEqual(expect.arrayContaining(['a/v.ily', 'b/v.ily']));
+    expect(result.diagnostics.map((d) => d.message)).toEqual([
+      'v.ily was placed in a/ and b/ because main.ly includes it from there.',
+    ]);
+  });
+
+  it('drops an explicit main file that is a placed include', async () => {
+    const { engine, requests } = fakeEngine();
+    const files: ProjectFile[] = [
+      { path: 'main.ly', content: String.raw`\include "parts/voice.ly"` },
+      { path: 'voice.ly', content: '' },
+    ];
+    const result = await convert(files, { ...sage, mainFiles: ['main.ly', 'voice.ly'] }, engine);
+    expect(requests).toHaveLength(1);
+    expect(result.outputs.map((o) => o.mainFile)).toEqual(['main.ly']);
+    expect(result.diagnostics.map((d) => d.message)).toContain(
+      'voice.ly is included by main.ly, so it is not converted on its own.',
+    );
+  });
+
+  it('warns about ambiguous flat uploads, moves nothing and still reports the missing include', async () => {
+    const { engine, requests } = fakeEngine();
     const files: ProjectFile[] = [
       { path: 'main.ly', content: String.raw`\include "parts/voice.ily"` },
       { path: 'voice.ily', content: '' },
       { path: 'old/voice.ily', content: '' },
     ];
     const result = await convert(files, sage, engine);
-    const warning = result.diagnostics.find((d) => d.severity === 'warning');
-    expect(warning?.message).toBe(
-      'Several uploaded files are called voice.ily; main.ly includes parts/voice.ily. Upload the whole folder instead (Choose a folder) so the right one is used.',
+    expect(requests).toHaveLength(0);
+    expect(result.diagnostics.find((d) => d.severity === 'warning')?.message).toBe(
+      'Several uploaded files are called voice.ily, so it is unclear which one main.ly means by parts/voice.ily. Upload the whole project folder so the folder structure is kept.',
     );
+    expect(
+      result.diagnostics.some((d) => d.severity === 'error' && d.message.includes('cannot find included file')),
+    ).toBe(true);
   });
 });
