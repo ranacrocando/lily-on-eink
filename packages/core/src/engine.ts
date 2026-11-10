@@ -26,7 +26,19 @@ export interface EngineResult {
   aborted?: boolean;
 }
 
+export interface EngineLoadProgress {
+  loadedBytes: number;
+  totalBytes: number;
+}
+
+export interface EnginePreloadOptions {
+  signal?: AbortSignal;
+  onProgress?: (p: EngineLoadProgress) => void;
+}
+
 export interface Engine {
+  /** Optional: load the engine ahead of the first compile. `onProgress` reports the download in browsers. */
+  preload?(options?: EnginePreloadOptions): Promise<void>;
   lilypondVersion(): Promise<string>;
   compile(req: EngineRequest): Promise<EngineResult>;
   dispose(): void;
