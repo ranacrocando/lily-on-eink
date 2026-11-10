@@ -15,7 +15,7 @@ function fakeEngine(answer: (req: EngineRequest) => EngineResult | Promise<Engin
       requests.push(req);
       return answer(req);
     },
-    dispose: () => {},
+    dispose: () => undefined,
   };
   return { engine, requests };
 }

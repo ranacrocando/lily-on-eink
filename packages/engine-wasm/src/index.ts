@@ -70,7 +70,7 @@ export function createWasmEngine(): Engine {
       try {
         assertUsable();
       } catch (error) {
-        return Promise.reject(error);
+        return Promise.reject(error instanceof Error ? error : new Error(String(error)));
       }
       version ??= (async () => {
         const result = await compile({

@@ -92,7 +92,7 @@ function firstStaffRows(png: Uint8Array): [number, number] {
     for (let x = 0; x < width; x++) if (data[(y * width + x) * 4]! < 128) dark++;
     if (dark <= width / 2) continue;
     const prev = lines.at(-1);
-    if (prev && prev.to === y - 1) prev.to = y;
+    if (prev?.to === y - 1) prev.to = y;
     else lines.push({ from: y, to: y });
   }
   if (lines.length < 2) throw new Error('no staff found');
@@ -126,7 +126,9 @@ function darkRunCentres(png: Uint8Array, fraction: number, maxRun = 4): number[]
 
 function savePages(name: string, pages: Uint8Array[]): void {
   mkdirSync(TEST_OUTPUT, { recursive: true });
-  pages.forEach((page, i) => writeFileSync(join(TEST_OUTPUT, `${name}-page${i + 1}.png`), page));
+  pages.forEach((page, i) => {
+    writeFileSync(join(TEST_OUTPUT, `${name}-page${i + 1}.png`), page);
+  });
 }
 
 const CASES = [

@@ -159,7 +159,9 @@ describe('engine-wasm contract', () => {
 
   it('aborts via signal and compiles again afterwards on the same engine', async () => {
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 300);
+    setTimeout(() => {
+      controller.abort();
+    }, 300);
     const aborted = await engine.compile(req(veryLongMusic, { signal: controller.signal }));
     expect(aborted).toMatchObject({ ok: false, exitCode: -1, aborted: true, files: {} });
 

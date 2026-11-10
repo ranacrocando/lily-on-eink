@@ -57,7 +57,7 @@ export function outputFileName(
 ): string {
   const fallback = (basename.split(/[\\/]/).pop() ?? basename).replace(/\.[^.]*$/, '');
   const t = title?.trim();
-  const base = clean(t ? t : fallback.trim());
+  const base = clean(t === undefined || t === '' ? fallback.trim() : t);
   const book = bookIndex > 0 ? ` (${bookIndex + 1})` : '';
   const fixed = `${book} – `;
   const ext = '.pdf';
