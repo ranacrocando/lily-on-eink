@@ -14,6 +14,14 @@ pageTurn = #(define-music-function () () (lily-on-eink:neutral-page-marker))
 noPageTurn = #(define-music-function () () (lily-on-eink:neutral-page-marker))
 allowPageTurn = #(define-music-function () () (lily-on-eink:neutral-page-marker))
 
+% Device settings, set by the wrapper before the user's file: an alist with paper-width,
+% paper-height, top-margin, bottom-margin, left-margin and right-margin in mm, staff-size in
+% pt and keep-tagline (a boolean). #f: not configured.
+#(define lily-on-eink:device #f)
+#(define (lily-on-eink:configure! settings) (set! lily-on-eink:device settings))
+#(define (lily-on-eink:keep-tagline?)
+   (or (not lily-on-eink:device) (assq-ref lily-on-eink:device 'keep-tagline)))
+
 % --- Titles that fit the page width ---------------------------------------------------------
 % Header fields are wrapped (strings) or scaled down (markups) to the line width. The markups
 % below are only definitions; the wrapper's final \paper block installs them, so they replace
@@ -155,14 +163,15 @@ staff spaces apart."
 
 #(define-markup-command (lily-on-eink-footer layout props) ()
    "Page footer: the copyright on the first page of each book part, the tagline (one size
-smaller) on the very last page of the book; both wrapped or scaled to the line width."
+smaller) on the very last page of the book unless the device settings drop it; both wrapped
+or scaled to the line width."
    (let* ((width (lily-on-eink:available-width layout props))
           (copyright
            (if (lily-on-eink:part-first-page? layout props)
                (interpret-markup layout props (make-lily-on-eink-field-markup 'header:copyright))
                empty-stencil))
           (tagline
-           (if (lily-on-eink:book-last-page? layout props)
+           (if (and (lily-on-eink:keep-tagline?) (lily-on-eink:book-last-page? layout props))
                (interpret-markup layout (cons '((font-size . -1)) props)
                                  (make-lily-on-eink-field-markup 'header:tagline))
                empty-stencil)))
@@ -330,4 +339,45 @@ are reflowed into rows first."
 #(define (bookpart-text-handler book text)
    (lily-on-eink:bookpart-text-handler book (lily-on-eink:fitted text)))
 
+% --- The device paper, also inside \book and \bookpart ---------------------------------------
+% The wrapper's \paper block after the user's file only reaches the default paper. A \book is
+% printed as soon as it is read, with the paper it had then, and a \paper inside a \book or
+% \bookpart replaces paper size, margins and staff size for that book. So every book, the
+% implicit one at the end of the file included, passes through the book handler below, which
+% writes the device settings into the paper of the book and of each of its book parts, after
+% everything the user's file set. Other paper settings (fonts, spacing) are kept.
+
+#(define (lily-on-eink:apply-device! paper)
+   (let* ((ref (lambda (key) (assq-ref lily-on-eink:device key)))
+          (set (lambda (key value) (ly:output-def-set-variable! paper key value)))
+          (mm (ly:output-def-lookup paper 'mm 1))
+          (staff-height (* (ref 'staff-size) (ly:output-def-lookup paper 'pt))))
+     ;; Re-applied only when it differs: it also resets the paper's font sizes.
+     (if (> (abs (- staff-height (ly:output-def-lookup paper 'staff-height 0))) 1e-6)
+         (layout-set-absolute-staff-size-in-module (ly:output-def-scope paper) staff-height))
+     (for-each (lambda (key) (set key (* mm (ref key))))
+               '(paper-width paper-height top-margin bottom-margin left-margin right-margin))
+     (set 'line-width (* mm (- (ref 'paper-width) (ref 'left-margin) (ref 'right-margin))))
+     ;; One-sided and upright, so the four margins above are the ones used.
+     (set 'two-sided #f)
+     (set 'landscape #f)
+     (set 'ragged-last-bottom #t)
+     (set 'print-page-number #f)
+     (set 'bookTitleMarkup lilyOnEinkBookTitleMarkup)
+     (set 'scoreTitleMarkup lilyOnEinkScoreTitleMarkup)
+     (set 'oddHeaderMarkup lilyOnEinkPageHeaderMarkup)
+     (set 'evenHeaderMarkup lilyOnEinkPageHeaderMarkup)
+     (set 'oddFooterMarkup lilyOnEinkFooterMarkup)
+     (set 'evenFooterMarkup lilyOnEinkFooterMarkup)))
+
+% Applies the device settings to the paper of @var{book} and of all its book parts.
+#(define (lily-on-eink:apply-device-to-book! book)
+   (let ((paper (ly:book-paper book)))
+     (if (ly:output-def? paper) (lily-on-eink:apply-device! paper)))
+   (for-each lily-on-eink:apply-device-to-book! (ly:book-book-parts book)))
+
+#(define lily-on-eink:toplevel-book-handler toplevel-book-handler)
+#(define (toplevel-book-handler book)
+   (if lily-on-eink:device (lily-on-eink:apply-device-to-book! book))
+   (lily-on-eink:toplevel-book-handler book))
 `;

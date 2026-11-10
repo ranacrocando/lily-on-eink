@@ -213,10 +213,9 @@ The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, be
   - `\lily-on-eink-footer`: copyright on the first page of each book part, tagline on the last page of the book.
 - It applies to every header field the title markups render: `dedication`, `title`, `subtitle`, `subsubtitle`, `instrument`, `poet`, `composer`, `meter`, `arranger`, `piece` and `opus`, plus `copyright` and `tagline`.
 - The title is `\huge \bold`, two font-size steps below LilyPond's A4 default, so that typical titles fit one line on a 6–8" page.
-- **Installation:** the wrapper's final `\paper` block, after the user's `\include`, sets `bookTitleMarkup`, `scoreTitleMarkup`, `oddHeaderMarkup`, `evenHeaderMarkup`, `oddFooterMarkup` and `evenFooterMarkup` to the overlay's markups. Being the last write to the default paper, it wins over LilyPond's defaults and the user's top-level `\paper`.
+- **Installation:** the wrapper's final `\paper` block, after the user's `\include`, sets `bookTitleMarkup`, `scoreTitleMarkup`, `oddHeaderMarkup`, `evenHeaderMarkup`, `oddFooterMarkup` and `evenFooterMarkup` to the overlay's markups. Being the last write to the default paper, it wins over LilyPond's defaults and the user's top-level `\paper`. For `\book` and `\bookpart` papers the book handler installs the same markups (see "Device paper inside `\book` and `\bookpart`").
 - **Known limits:**
   - The user's own page headers and footers are replaced, and so is a `bookTitleMarkup` (including `bookTitleMarkup = ##f` used to hide titles).
-  - A `\paper` block inside `\book` or `\bookpart` is not covered yet; its title markups stay as the user wrote them.
 - `\wordwrap-field` is not used: it returns an empty stencil for markup values and is left-aligned.
 
 **Top-level markup.**
@@ -227,9 +226,24 @@ The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, be
 - Lines of a markup list command (`\column-lines`, `\wordwrap-lines`, …) are scaled down individually if too wide; they are not reflowed (they are lines already).
 - Reflowing only `\line` and `\fill-line` is deliberate: those are the commands that put things side by side in verse and text blocks. Other layouts (`\concat`, `\combine`, `\overlay`, tables) are only ever scaled, so they never change shape unexpectedly.
 
+**Device paper inside `\book` and `\bookpart`.**
+- A `\book` is printed as soon as the parser has read it, with the paper it had then, so the wrapper's final `\paper` block never reaches it. A `\paper` inside a `\book` or `\bookpart` would also override size, margins and staff size for that book.
+- The wrapper therefore calls `#(lily-on-eink:configure! '((paper-width . …) (paper-height . …) (top-margin . …) (bottom-margin . …) (left-margin . …) (right-margin . …) (staff-size . …) (keep-tagline . …)))` (mm and pt) between the overlay include and the user's include.
+- The overlay wraps `toplevel-book-handler`. Every book passes through it right before it is printed, including the implicit book that LilyPond builds at the end of a file without `\book` (top-level `\bookpart`s end up in it). The handler writes the device settings into the paper of the book and, recursively, of each of its book parts, after everything the user's file set:
+  - `paper-width`, `paper-height`, the four margins and `line-width` (= width − left − right);
+  - `two-sided = ##f` and `landscape = ##f`, so the four margins are the ones used and the page is not rotated;
+  - the staff size, with `layout-set-absolute-staff-size-in-module`, only when the paper's `staff-height` differs (it also resets font sizes);
+  - `ragged-last-bottom`, `print-page-number` and the title, header and footer markups as in the wrapper's final `\paper` block.
+- This also neutralises `#(set-paper-size "a4")` and `#(set-global-staff-size …)` inside a book's `\paper`. All other paper settings of the user (fonts, spacing variables, indent) are kept.
+- `keep-tagline . #f` makes `\lily-on-eink-footer` drop the tagline in every book; the wrapper's top-level `\header { tagline = ##f }` alone does not reach an explicit `\book`, whose header is fixed when it is read.
+- Paper lengths are stored in mm in 2.26 (`mm` = 1 in a paper), but the handler still multiplies by the paper's `mm` so it stays correct if that changes.
+- Fixtures: `corpus/books/book-paper` (`\paper` with A4 and 30 mm margins in a `\book`), `corpus/books/bookpart-paper` (in a top-level `\bookpart` and in a `\bookpart` of a `\book`) and `corpus/books/book-paper-commands` (`set-paper-size` and `set-global-staff-size` in a `\book`'s `\paper`).
+- Because the implicit book passes through the same handler, a top-level `\paper { line-width = … }` is overridden as well.
+- Not yet covered: `system-count`, `page-count`, `systems-per-page` and the like in a `\paper`, `inner-margin`/`outer-margin`/`binding-offset` are left as set (harmless with `two-sided = ##f`), and a score-level `\layout` with `line-width` (§4.1 steps 2 and 3 describe the plan).
+
 **Tagline.**
 - Kept by default, because taglines often carry license or attribution text. It is rendered one size smaller and wrapped with the same custom markup command, by `\lily-on-eink-footer`.
-- `keepTagline: false` drops it.
+- `keepTagline: false` drops it, in explicit `\book`s too (through `keep-tagline` in `configure!`).
 
 ### 4.2 Physical sizing and margins
 

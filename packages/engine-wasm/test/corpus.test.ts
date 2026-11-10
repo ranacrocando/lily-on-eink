@@ -524,3 +524,70 @@ describe('top-level markup on kobo-sage', () => {
     expect(box.right).toBeGreaterThan(box.width - lineRightPx - 10);
   });
 });
+
+describe('device paper inside \\book and \\bookpart on kobo-sage', () => {
+  const BOOKS = [
+    { name: 'book-paper', dir: 'books/book-paper', outputs: 1 },
+    { name: 'bookpart-paper', dir: 'books/bookpart-paper', outputs: 2 },
+    { name: 'book-paper-commands', dir: 'books/book-paper-commands', outputs: 1 },
+  ] as const;
+
+  it.each(BOOKS)('$name gets the device page size and draws nothing in the edge band', async (c) => {
+    const result = await convert(
+      loadCorpusDir(c.dir),
+      { device: 'kobo-sage', outputs: ['pdf', 'png'], keepTagline: false },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    expect(result.outputs).toHaveLength(c.outputs);
+    result.outputs.forEach((output, i) => {
+      const [w, h] = pdfMediaBoxMm(output.pdf!);
+      expect(Math.abs(w - SAGE_MM.width)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(h - SAGE_MM.height)).toBeLessThanOrEqual(0.5);
+      const pages = output.pngPages ?? [];
+      expect(pages.length).toBeGreaterThan(0);
+      savePages(`${c.name}-${i}`, pages);
+      for (const page of pages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+    });
+  });
+
+  it('overrides a top-level line-width (the implicit book passes the same handler)', async () => {
+    const source = String.raw`\paper { line-width = 200\mm } \new Staff { \repeat unfold 24 { c''4 d'' e'' f'' } }`;
+    const result = await convert(
+      [{ path: 'line-width.ly', content: source }],
+      { device: 'kobo-sage', outputs: ['png'], keepTagline: false },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const pages = result.outputs[0]!.pngPages!;
+    savePages('line-width', pages);
+    for (const page of pages) expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
+  });
+
+  it('keeps the staff size against set-global-staff-size inside a \\book', async () => {
+    const result = await convert(
+      loadCorpusDir('books/book-paper-commands'),
+      { device: 'kobo-sage', staffSize: 17, outputs: ['png'], keepTagline: false },
+      engine,
+    );
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const page = result.outputs[0]!.pngPages![0]!;
+    // First to last staff line: four staff spaces (plus one line thickness). 17 pt = 17.7 px.
+    const [first, last] = firstStaffRows(page);
+    expect(Math.abs((last - first) / 4 - 17.7)).toBeLessThanOrEqual(1);
+  });
+
+  it('drops the tagline of an explicit \\book when keepTagline is false', async () => {
+    const result = await convert(
+      loadCorpusDir('books/book-paper'),
+      { device: 'kobo-sage', outputs: ['png'], keepTagline: false },
+      engine,
+    );
+    const { width, height, data } = PNG.sync.read(Buffer.from(result.outputs[0]!.pngPages![0]!));
+    // The music ends in the upper half; the footer area (bottom 15 %) has no copyright in this
+    // file and must have no tagline either.
+    let ink = 0;
+    for (let i = Math.floor(0.85 * height) * width * 4; i < data.length; i += 4) if (data[i]! < 128) ink++;
+    expect(ink).toBe(0);
+  });
+});

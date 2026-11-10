@@ -14,6 +14,9 @@ const base: WrapperOptions = {
 
 const expected = String.raw`\version "2.26.0"
 \include "lily-on-eink.ily"
+#(lily-on-eink:configure! '((paper-width . 121.92) (paper-height . 162.56)
+  (top-margin . 3) (bottom-margin . 3) (left-margin . 6) (right-margin . 3)
+  (staff-size . 17) (keep-tagline . #t)))
 \include "song.ly"
 \paper {
   paper-width = 121.92\mm
@@ -40,9 +43,9 @@ describe('buildWrapper', () => {
     expect(w.source).toBe(expected);
     expect(w.overlay).toEqual({ name: 'lily-on-eink.ily', content: OVERLAY_ILY });
   });
-  it('appends a tagline suppression', () => {
+  it('appends a tagline suppression and tells the overlay to drop taglines', () => {
     expect(buildWrapper({ ...base, keepTagline: false }).source).toBe(
-      expected + String.raw`\header { tagline = ##f }` + '\n',
+      expected.replace('(keep-tagline . #t)', '(keep-tagline . #f)') + String.raw`\header { tagline = ##f }` + '\n',
     );
   });
   it('limits numbers to 2 decimals without locale formatting', () => {
