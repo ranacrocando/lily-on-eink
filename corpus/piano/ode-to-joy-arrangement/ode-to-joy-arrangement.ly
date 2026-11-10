@@ -2,7 +2,7 @@
 % lily-on-eink test corpus, CC0 1.0 Universal (public domain dedication).
 % Original piano arrangement written for this corpus. The melody is the theme from
 % L. v. Beethoven, Symphony No. 9, 4th movement (composer died 1827, public domain).
-% Exercises: PianoStaff, Dynamics context, hairpins, sustain pedal marks, fingering,
+% Exercises: PianoStaff with instrument names, Dynamics context, hairpins, sustain pedal marks, fingering,
 % thirds and octave doublings, tempo mark, key signature.
 
 \header {
@@ -12,9 +12,6 @@
   arranger = "Arr.: lily-on-eink test corpus"
   tagline = "CC0 1.0 – public domain dedication"
 }
-
-% Instrument names are deliberately omitted: a known overlay bug clips short instrument
-% names on later systems at the left page edge (fixed separately; see corpus.test.ts).
 
 global = {
   \key c \major
@@ -65,7 +62,7 @@ dynamics = {
 }
 
 \score {
-  \new PianoStaff <<
+  \new PianoStaff \with { instrumentName = "Klavier" shortInstrumentName = "Kl." } <<
     \new Staff = "right" \right
     \new Dynamics \dynamics
     \new Staff = "left" \left
