@@ -9,7 +9,12 @@ export default tseslint.config(
   {
     files: ['**/*.ts'],
     extends: [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked],
-    languageOptions: { parserOptions: { projectService: { allowDefaultProject: ['vitest.config.ts'] }, tsconfigRootDir: import.meta.dirname } },
+    languageOptions: {
+      parserOptions: {
+        projectService: { allowDefaultProject: ['vitest.config.ts'] },
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
   },
   {
     files: ['**/*.ts'],

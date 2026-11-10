@@ -12,8 +12,7 @@ const fileUrl = 'file:' + '///C:/x';
 const backtickPath = '`' + '/' + 'home' + '/x`';
 const email = 'x' + '@' + 'example.org';
 
-const rules = (text: string, denylist: string[] = []) =>
-  checkText(text, { denylist }).map((f) => f.rule);
+const rules = (text: string, denylist: string[] = []) => checkText(text, { denylist }).map((f) => f.rule);
 
 describe('privacy checkText', () => {
   it.each([winHome, winHomeSlash, nixHome, macHome, fileUrl])('flags absolute path %#', (p) => {
@@ -26,7 +25,9 @@ describe('privacy checkText', () => {
 
   it('skipPathAndEmail still reports denylist but not abs-path or email', () => {
     const text = `${nixHome} ${email} secret corp`;
-    expect(checkText(text, { denylist: ['secret corp'], skipPathAndEmail: true }).map((f) => f.rule)).toEqual(['denylist']);
+    expect(checkText(text, { denylist: ['secret corp'], skipPathAndEmail: true }).map((f) => f.rule)).toEqual([
+      'denylist',
+    ]);
   });
 
   it('CLI never prints the matched denylist text', () => {

@@ -59,7 +59,11 @@ describe('convert', () => {
 
   it('applies profile staff size and margins plus the tagline option', async () => {
     const { engine, requests } = fakeEngine();
-    await convert([{ path: 'a.ly', content: "{ c'1 }" }], { ...sage, profile: 'leadsheet', keepTagline: false }, engine);
+    await convert(
+      [{ path: 'a.ly', content: "{ c'1 }" }],
+      { ...sage, profile: 'leadsheet', keepTagline: false },
+      engine,
+    );
     expect(requests[0]!.source).toContain('(set-global-staff-size 18)');
     expect(requests[0]!.source).toContain(String.raw`left-margin = 6\mm`);
     expect(requests[0]!.source).toContain(String.raw`\header { tagline = ##f }`);
@@ -105,7 +109,12 @@ describe('convert', () => {
     );
     expect(requests.map((r) => r.source)).toEqual([expect.stringContaining(String.raw`\include "b.ly"`)]);
     expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ file: 'inc.ily', line: 1, severity: 'error', message: expect.stringContaining('gone.ily') }),
+      expect.objectContaining({
+        file: 'inc.ily',
+        line: 1,
+        severity: 'error',
+        message: expect.stringContaining('gone.ily'),
+      }),
     );
     expect(result.outputs.map((o) => o.mainFile)).toEqual(['b.ly']);
   });
@@ -122,9 +131,7 @@ describe('convert', () => {
     );
     expect(requests).toHaveLength(1);
     expect(requests[0]!.source).toContain(String.raw`\include "b.ly"`);
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ file: 'nope.ly', severity: 'error' }),
-    );
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ file: 'nope.ly', severity: 'error' }));
   });
 
   it('groups books, warns about unrecognized outputs and normalizes the log', async () => {
@@ -222,7 +229,11 @@ describe('convert', () => {
     );
     expect(requests[0]!.files['x/lily-on-eink.ily']).toBe(OVERLAY_ILY);
     expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ file: 'x/lily-on-eink.ily', severity: 'warning', message: expect.stringContaining('replaced') }),
+      expect.objectContaining({
+        file: 'x/lily-on-eink.ily',
+        severity: 'warning',
+        message: expect.stringContaining('replaced'),
+      }),
     );
   });
 

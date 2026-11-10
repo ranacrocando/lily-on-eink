@@ -91,7 +91,8 @@ async function main(): Promise<number> {
             keepTagline: opts.keepTagline,
             ...(mainFiles ? { mainFiles } : {}),
             onProgress: (p) => {
-              if (p.phase === 'compiling') console.log(`[${p.index + 1}/${p.total}] ${toPosix(join(root, p.mainFile))}`);
+              if (p.phase === 'compiling')
+                console.log(`[${p.index + 1}/${p.total}] ${toPosix(join(root, p.mainFile))}`);
             },
           },
           engine,

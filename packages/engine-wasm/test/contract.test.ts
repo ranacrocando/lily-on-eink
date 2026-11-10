@@ -3,9 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Engine, EngineRequest } from '@lily-on-eink/core';
 import { createWasmEngine } from '@lily-on-eink/engine-wasm';
 
-const engineVersion = JSON.parse(
-  readFileSync(new URL('../engine-version.json', import.meta.url), 'utf8'),
-) as { lilypond: string };
+const engineVersion = JSON.parse(readFileSync(new URL('../engine-version.json', import.meta.url), 'utf8')) as {
+  lilypond: string;
+};
 
 const MM_PER_PT = 25.4 / 72;
 
@@ -87,15 +87,11 @@ describe('engine-wasm contract', () => {
       req(String.raw`\book { { c1 } } \book { { d1 } }`, { formats: ['pdf', 'png'], resolution: 50 }),
     );
     expect(result.ok).toBe(true);
-    expect(Object.keys(result.files).sort()).toEqual(
-      ['score-1.pdf', 'score-1.png', 'score.pdf', 'score.png'],
-    );
+    expect(Object.keys(result.files).sort()).toEqual(['score-1.pdf', 'score-1.png', 'score.pdf', 'score.png']);
   });
 
   it('names multi-page PNGs score-page1.png, score-page2.png, ...', async () => {
-    const result = await engine.compile(
-      req(`${smallPaper}\n${longMusic}`, { formats: ['png'], resolution: 50 }),
-    );
+    const result = await engine.compile(req(`${smallPaper}\n${longMusic}`, { formats: ['png'], resolution: 50 }));
     expect(result.ok).toBe(true);
     const names = naturalSort(Object.keys(result.files));
     expect(names.length).toBeGreaterThanOrEqual(2);

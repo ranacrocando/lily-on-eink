@@ -250,7 +250,11 @@ describe('corpus on kobo-sage', () => {
 
 describe('corpus on other devices', () => {
   it.each(['kobo-clara-bw', 'remarkable-2'])('reger converts on %s with the device page size', async (id) => {
-    const result = await convert(loadCorpusDir('organ/reger-lobe-den-herren'), { device: id, profile: 'organ' }, engine);
+    const result = await convert(
+      loadCorpusDir('organ/reger-lobe-den-herren'),
+      { device: id, profile: 'organ' },
+      engine,
+    );
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     expect(result.outputs).toHaveLength(1);
     const expected = pageSizeMm(getDevice(id));
@@ -396,7 +400,10 @@ ${opts.score ?? MUSIC}
   });
 
   it('renders poet flush left and composer flush right', async () => {
-    const page = await renderTitles('poet-composer', `title = "${WORDS}" poet = "Poet Name" composer = "Composer Name"`);
+    const page = await renderTitles(
+      'poet-composer',
+      `title = "${WORDS}" poet = "Poet Name" composer = "Composer Name"`,
+    );
     expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
     const { width } = PNG.sync.read(Buffer.from(page));
     // The centred title stays in the middle; the outer quarters hold only poet and composer.
@@ -406,11 +413,9 @@ ${opts.score ?? MUSIC}
 
   it("overrides a bookTitleMarkup from the user's own \\paper block", async () => {
     // The user's markup would print the title on one line, overflowing both edges.
-    const page = await renderTitles(
-      'user-paper',
-      `title = "${Array(8).fill(WORDS).join(' ')}"`,
-      { paper: String.raw`\paper { bookTitleMarkup = \markup \fill-line { \huge \fromproperty #'header:title } }` },
-    );
+    const page = await renderTitles('user-paper', `title = "${Array(8).fill(WORDS).join(' ')}"`, {
+      paper: String.raw`\paper { bookTitleMarkup = \markup \fill-line { \huge \fromproperty #'header:title } }`,
+    });
     expect(nonWhiteInBand(page, BAND_PX)).toBe(0);
     const box = titleInk(page);
     expect(box.bottom - box.top + 1).toBeGreaterThan(1.8 * (await oneLineHeight()));

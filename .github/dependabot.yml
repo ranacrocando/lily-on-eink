@@ -1,31 +1,31 @@
 # Dependency updates: monthly, grouped to keep PR noise low.
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "monthly"
+      interval: 'monthly'
     open-pull-requests-limit: 5
     groups:
       # The LilyPond engine changes layouts: always its own PR, reviewed against visual snapshots.
       lilypond-engine:
-        patterns: ["@sightread/lilypond-wasm"]
+        patterns: ['@sightread/lilypond-wasm']
       npm-minor-and-patch:
-        patterns: ["*"]
-        exclude-patterns: ["@sightread/lilypond-wasm"]
-        update-types: ["minor", "patch"]
+        patterns: ['*']
+        exclude-patterns: ['@sightread/lilypond-wasm']
+        update-types: ['minor', 'patch']
     commit-message:
-      prefix: "chore"
-      include: "scope"
+      prefix: 'chore'
+      include: 'scope'
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: 'github-actions'
+    directory: '/'
     schedule:
-      interval: "monthly"
+      interval: 'monthly'
     groups:
       github-actions:
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
+        patterns: ['*']
+        update-types: ['minor', 'patch']
     commit-message:
-      prefix: "ci"
-      include: "scope"
+      prefix: 'ci'
+      include: 'scope'

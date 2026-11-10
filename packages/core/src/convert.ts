@@ -247,7 +247,10 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
     diagnostics.push(...parseDiagnostics(log));
     if (!result.ok) {
       diagnostics.push(
-        error(mainFile, result.aborted ? 'conversion aborted or timed out' : `LilyPond failed (exit code ${result.exitCode})`),
+        error(
+          mainFile,
+          result.aborted ? 'conversion aborted or timed out' : `LilyPond failed (exit code ${result.exitCode})`,
+        ),
       );
       progress('failed');
       continue;
@@ -255,7 +258,13 @@ export async function convert(files: ProjectFile[], options: ConvertOptions, eng
 
     const grouped = groupOutputs(result.files);
     for (const name of grouped.unrecognized) {
-      diagnostics.push({ file: mainFile, line: 0, column: 0, severity: 'warning', message: `ignored unexpected engine output "${name}"` });
+      diagnostics.push({
+        file: mainFile,
+        line: 0,
+        column: 0,
+        severity: 'warning',
+        message: `ignored unexpected engine output "${name}"`,
+      });
     }
     const title = findTitle(texts[mainFile] ?? '');
     for (const book of grouped.books) {

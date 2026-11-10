@@ -22,10 +22,7 @@ export function createWasmEngine(): Engine {
     if (disposed) throw new Error('engine disposed');
   };
 
-  const run = async (
-    source: string,
-    options: Parameters<ReusableCompiler['compile']>[1],
-  ): Promise<CompileResult> => {
+  const run = async (source: string, options: Parameters<ReusableCompiler['compile']>[1]): Promise<CompileResult> => {
     compiler ??= createReusableCompiler();
     try {
       return await compiler.compile(source, options);
@@ -40,10 +37,9 @@ export function createWasmEngine(): Engine {
 
   const compile = async (req: EngineRequest): Promise<EngineResult> => {
     assertUsable();
-    const signals = [
-      req.signal,
-      req.timeoutMs !== undefined ? AbortSignal.timeout(req.timeoutMs) : undefined,
-    ].filter((s): s is AbortSignal => s !== undefined);
+    const signals = [req.signal, req.timeoutMs !== undefined ? AbortSignal.timeout(req.timeoutMs) : undefined].filter(
+      (s): s is AbortSignal => s !== undefined,
+    );
     const signal = signals.length ? AbortSignal.any(signals) : undefined;
     try {
       const result = await run(req.source, {
