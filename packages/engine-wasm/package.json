@@ -1,6 +1,12 @@
 {
   "name": "@lily-on-eink/engine-wasm",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Node engine adapter for lily-on-eink that runs LilyPond as WebAssembly.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ranacrocando/lily-on-eink.git",
+    "directory": "packages/engine-wasm"
+  },
   "license": "GPL-3.0-or-later",
   "type": "module",
   "exports": {
@@ -17,6 +23,6 @@
   },
   "dependencies": {
     "@sightread/lilypond-wasm": "0.2.0",
-    "@lily-on-eink/core": "0.0.0"
+    "@lily-on-eink/core": "0.1.0"
   }
 }

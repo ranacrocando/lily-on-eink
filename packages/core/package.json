@@ -1,6 +1,12 @@
 {
   "name": "@lily-on-eink/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "The core of lily-on-eink: device presets, genre profiles and a LilyPond overlay that convert LilyPond scores to PDFs sized for e-reader screens.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ranacrocando/lily-on-eink.git",
+    "directory": "packages/core"
+  },
   "license": "MIT",
   "type": "module",
   "exports": {
