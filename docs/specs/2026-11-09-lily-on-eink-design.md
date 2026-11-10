@@ -183,7 +183,7 @@ The overlay acts at three points.
 3. Removes `system-count`, `page-count`, `systems-per-page`, `min-systems-per-page` and `max-systems-per-page`. Resets `page-breaking` to the profile's breaker (default `ly:optimal-breaking`).
 4. Re-applies the staff size with `layout-set-absolute-staff-size-in-module`. This is needed because a user's `#(set-global-staff-size …)` replaces `$defaultpaper` with a clone, which throws away the pre-include setup.
 5. Applies the profile's thickness and font settings (§4.4).
-6. Sets `print-page-number = ##f`, `ragged-last-bottom = ##t`, and the title, page header and footer handling below. (In the current slice this lives in the wrapper's final `\paper` block, which follows the user's `\include`; see "Titles".)
+6. Sets `print-page-number = ##f`, `ragged-last-bottom = ##t`, the bottom stretchability (see "Vertical fill"), and the title, page header and footer handling below. (In the current slice this lives in the wrapper's final `\paper` block, which follows the user's `\include`; see "Titles".)
 7. Sets the indent (see "Indent" below).
 
 The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, because nested `\bookpart`s inside a `\book` never reach `toplevel-bookpart-handler`.
@@ -235,6 +235,7 @@ The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, be
   - `two-sided = ##f` and `landscape = ##f`, so the four margins are the ones used and the page is not rotated;
   - the staff size, with `layout-set-absolute-staff-size-in-module`, only when the paper's `staff-height` differs (it also resets font sizes);
   - `ragged-last-bottom`, `print-page-number` and the title, header and footer markups as in the wrapper's final `\paper` block.
+  - the stretchability of `last-bottom-spacing` (see "Vertical fill").
 - This also neutralises `#(set-paper-size "a4")` and `#(set-global-staff-size …)` inside a book's `\paper`. All other paper settings of the user (fonts, spacing variables, indent) are kept.
 - `keep-tagline . #f` makes `\lily-on-eink-footer` drop the tagline in every book; the wrapper's top-level `\header { tagline = ##f }` alone does not reach an explicit `\book`, whose header is fixed when it is read.
 - Paper lengths are stored in mm in 2.26 (`mm` = 1 in a paper), but the handler still multiplies by the paper's `mm` so it stays correct if that changes.
@@ -242,6 +243,14 @@ The book hook **recurses** through `ly:book-book-parts` and `ly:book-scores`, be
 - Because the implicit book passes through the same handler, a top-level `\paper { line-width = … }` is overridden as well.
 - Not yet covered: `system-count`, `page-count`, `systems-per-page` and the like in a `\paper`; `inner-margin`/`outer-margin`/`binding-offset` are left as set (harmless with `two-sided = ##f`); a score-level `\layout` with `line-width`; a score-level `layout-set-staff-size` (names are measured at the paper's staff size); instrument names set in `\layout` `\context` definitions; `InstrumentName` font-size or font overrides (names are measured at the default text size); instrument names in scores embedded in markup (`\markup \score { … }`), which the book handler never sees; a user redefinition of `toplevel-book-handler` (or the text handlers) after the overlay, which bypasses all of this; very large user indents (kept as they are; capping them, e.g. at 25 % of the line width, was considered and left out, since it would change layouts that fit) (§4.1 steps 2 and 3 describe the plan).
 - `\bookOutputName` and `\bookOutputSuffix` are redefined as commands that do nothing: the engine names its outputs `score`, `score-1`, … in book order, and a renamed book would be lost.
+
+**Vertical fill.**
+- Pages other than the last one of a book part keep `ragged-bottom = ##f`: LilyPond stretches their flexible vertical spacings until the last system reaches the bottom margin, sharing the free space by stretchability between the systems (`system-system-spacing`, 60 by default), the titles, the staves within the systems and the space below the last system (`last-bottom-spacing`, 30).
+- On a page with few tall systems this put almost all free space into one or two gaps. The ukulele song sheet (chord names, fret diagrams, staff with two verses, tab) has two systems on page 1 of the Kobo Sage, and they were pulled 22.5 mm apart (8 mm unstretched). Reading on the device, this looked too high.
+- The book handler therefore raises the stretchability of `last-bottom-spacing` to **4 × that of `system-system-spacing`** (`lily-on-eink:bottom-stretch-gaps`, 240 with the defaults); a larger value set by the user is kept. The space below the last system then stretches like four system gaps, so the share of free space that goes into the gaps grows with the number of systems on the page: about a fifth with two systems, about two thirds with eight. A sparse page keeps natural gaps with white space at the bottom, a page with many systems still looks evenly filled, and a full page (no free space) does not change.
+- Measured on kobo-sage (largest blank run between the first and last ink on non-last pages; blank space at the bottom of page 1): ukulele 22.5 → 13.0 mm (bottom 7.5 → 20.5 mm); accordion 10.7 → 3.4 mm (bottom 4.6 → 21.3 mm); Reger, the piano Ode and synthetic full pages unchanged; no page count changed (Reger stays 2 pages).
+- Alternatives measured: `ragged-bottom = ##t` (ukulele 8.0 mm, but page breaking changes too: a synthetic piano piece got different page contents, and pages with many systems are never filled); bottom stretchability 2 × (16.0 mm, still visibly wide) and 10 × (10.3 mm, close to ragged for all pages). LilyPond has no cap on a single gap and no per-page `ragged-bottom`; a page-breaking hook that chooses per page was not worth the complexity.
+- Test: the ukulele's page-1 gap stays below 16 mm, also when the score sits in a `\bookpart` whose own `\paper` sets `last-bottom-spacing.stretchability = #30`; Reger is exactly 2 pages.
 
 **Tagline.**
 - Kept by default, because taglines often carry license or attribution text. It is rendered one size smaller and wrapped with the same custom markup command, by `\lily-on-eink-footer`.

@@ -124,6 +124,30 @@ function darkRunCentres(png: Uint8Array, fraction: number, maxRun = 4): number[]
   return centres;
 }
 
+/**
+ * The tallest run of blank rows (no channel below 200) between the first and the last inked
+ * row of a page, in mm at 300 dpi. On a page of music this is the widest vertical gap: between
+ * two systems, or between the titles and the first system.
+ */
+function maxBlankRunMm(png: Uint8Array): number {
+  const { width, height, data } = PNG.sync.read(Buffer.from(png));
+  const inked = (y: number) => {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (data[i]! < 200 || data[i + 1]! < 200 || data[i + 2]! < 200) return true;
+    }
+    return false;
+  };
+  const rows = Array.from({ length: height }, (_, y) => inked(y));
+  let longest = 0;
+  let run = 0;
+  for (let y = rows.indexOf(true); y <= rows.lastIndexOf(true); y++) {
+    run = rows[y] ? 0 : run + 1;
+    longest = Math.max(longest, run);
+  }
+  return (longest * 25.4) / 300;
+}
+
 function savePages(name: string, pages: Uint8Array[]): void {
   mkdirSync(TEST_OUTPUT, { recursive: true });
   pages.forEach((page, i) => {
@@ -264,6 +288,47 @@ describe('corpus on kobo-sage', () => {
     const normal = (await convertOnSage(CASES[1])).outputs[0]!.pngPages![0]!;
     expect(nonWhiteInBand(normal, BAND_PX, firstStaffRows(normal))).toBe(0);
     expect(nonWhiteInBand(pages[0]!, BAND_PX, firstStaffRows(pages[0]!))).toBeGreaterThan(0);
+  });
+
+  // Page 1 of the ukulele song sheet holds two tall systems. Filling the page used to put all
+  // free space between them (22.5 mm blank; 8 mm unstretched); the overlay now leaves most of
+  // it below the last system.
+  const UKULELE_MAX_GAP_MM = 16;
+
+  it('keeps the two systems on ukulele page 1 close together', async () => {
+    const { pngPages = [] } = (await convertOnSage(CASES[4])).outputs[0]!;
+    expect(pngPages).toHaveLength(2);
+    expect(maxBlankRunMm(pngPages[0]!)).toBeLessThan(UKULELE_MAX_GAP_MM);
+  });
+
+  it('still fits reger on two pages', async () => {
+    const { pdf } = (await convertOnSage(CASES[0])).outputs[0]!;
+    expect(pdfPageCount(pdf!)).toBe(2);
+  });
+
+  it('limits the gap inside a bookpart with its own paper block as well', async () => {
+    // The ukulele score inside a \book and \bookpart whose own \paper sets LilyPond's default
+    // bottom stretchability again; the book handler must override it there too.
+    const files = loadCorpusDir('ukulele/oh-susanna').map((f) =>
+      f.path.endsWith('.ly')
+        ? {
+            path: f.path,
+            content:
+              String(f.content).replace(
+                String.raw`\score {`,
+                String.raw`\book { \bookpart { \paper { last-bottom-spacing.stretchability = #30 } \score {`,
+              ) + '} }\n',
+          }
+        : f,
+    );
+    const result = await convert(files, { device: 'kobo-sage', profile: 'tab', outputs: ['png'] }, engine);
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const pages = result.outputs[0]?.pngPages ?? [];
+    savePages('ukulele-bookpart', pages);
+    expect(pages).toHaveLength(2);
+    const topLevel = (await convertOnSage(CASES[4])).outputs[0]!.pngPages![0]!;
+    expect(maxBlankRunMm(pages[0]!)).toBeLessThan(UKULELE_MAX_GAP_MM);
+    expect(Math.abs(maxBlankRunMm(pages[0]!) - maxBlankRunMm(topLevel))).toBeLessThanOrEqual(0.5);
   });
 });
 

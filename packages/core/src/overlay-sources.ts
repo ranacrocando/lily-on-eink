@@ -390,6 +390,29 @@ are reflowed into rows first."
 % writes the device settings into the paper of the book and of each of its book parts, after
 % everything the user's file set. Other paper settings (fonts, spacing) are kept.
 
+% Vertical fill of pages that are not the last one. With ragged-bottom = #f, LilyPond
+% stretches the flexible spacings of a page until its last system reaches the bottom margin,
+% sharing the free space by stretchability: between the systems (system-system-spacing, 60 by
+% default) and below the last one (last-bottom-spacing, 30). A page with few tall systems (a
+% song sheet with chord diagrams, tab and lyrics: two systems per page) then puts all its free
+% space into one or two gaps. The overlay makes the space below the last system as stretchable
+% as lily-on-eink:bottom-stretch-gaps system gaps. Free space so goes mostly into the gaps on a
+% page with many systems (the page still looks filled; there is little free space anyway) and
+% mostly below the last system on a page with few systems (no huge gaps). Full pages are not
+% stretched at all, so they do not change. A larger stretchability set by the user is kept.
+#(define lily-on-eink:bottom-stretch-gaps 4)
+
+#(define (lily-on-eink:limit-fill! paper)
+   (let* ((stretch (lambda (key)
+                     (let ((v (assq-ref (ly:output-def-lookup paper key '()) 'stretchability)))
+                       (if (number? v) v 0))))
+          (wanted (* lily-on-eink:bottom-stretch-gaps (stretch 'system-system-spacing))))
+     (if (> wanted (stretch 'last-bottom-spacing))
+         (ly:output-def-set-variable!
+          paper 'last-bottom-spacing
+          (acons 'stretchability wanted
+                 (alist-delete 'stretchability (ly:output-def-lookup paper 'last-bottom-spacing '())))))))
+
 #(define (lily-on-eink:apply-device! paper)
    (let* ((ref (lambda (key) (assq-ref lily-on-eink:device key)))
           (set (lambda (key value) (ly:output-def-set-variable! paper key value)))
@@ -405,6 +428,7 @@ are reflowed into rows first."
      (set 'two-sided #f)
      (set 'landscape #f)
      (set 'ragged-last-bottom #t)
+     (lily-on-eink:limit-fill! paper)
      (set 'print-page-number #f)
      (set 'bookTitleMarkup lilyOnEinkBookTitleMarkup)
      (set 'scoreTitleMarkup lilyOnEinkScoreTitleMarkup)
